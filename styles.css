@@ -552,7 +552,9 @@ input {
 }
 
 
-body.entry-open .app-shell,
+body.entry-open .app,
+body.entry-open .shell,
+body.entry-open .board-shell,
 body.entry-open .sheet,
 body.entry-open .sheet-backdrop {
   pointer-events: none !important;
@@ -562,4 +564,14 @@ body.entry-open .entry-card,
 body.entry-open .entry-actions,
 body.entry-open .entry-actions button {
   pointer-events: auto !important;
+}
+.entry-modal {
+  overscroll-behavior: contain;
+}
+.entry-card {
+  position: relative;
+  z-index: 1;
+}
+.entry-actions button {
+  touch-action: manipulation;
 }
