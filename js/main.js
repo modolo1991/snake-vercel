@@ -1,6 +1,6 @@
 import { catalog, COIN_LIFE_STEPS, COIN_SPAWN_EVERY, defaultProfile, levelDefs } from './catalog.js';
 import { getAppConfig, hasSupabaseConfig } from './config.js';
-import { resetLocalProfile, saveLocalProfile, sanitizeProfile } from './storage.js';
+import { loadLocalProfile, resetLocalProfile, saveLocalProfile, sanitizeProfile } from './storage.js';
 import { fetchRemoteProfile, getSession, getSupabaseClient, onAuthStateChange, saveRemoteProfile, sendMagicLink, signIn, signOut, signUp } from './supabase.js';
 
 const canvas = document.getElementById('game');
@@ -17,6 +17,7 @@ const scoreEl = document.getElementById('score');
 const bestEl = document.getElementById('best');
 const coinsEl = document.getElementById('coins');
 const levelEl = document.getElementById('level');
+const livesEl = document.getElementById('lives');
 const speedPill = document.getElementById('speedPill');
 const statePill = document.getElementById('statePill');
 const goalPill = document.getElementById('goalPill');
@@ -74,7 +75,11 @@ const PHASE = {
   DEAD: 'dead',
 };
 
-let profile = saveLocalProfile(defaultProfile());
+const STARTING_LIVES = 3;
+const HEART_SPAWN_CHANCE = 0.09;
+const HEART_LIFE_STEPS = 30;
+
+let profile = loadLocalProfile();
 let currentUser = null;
 let saveMode = hasSupabaseConfig(config) ? 'supabase-ready' : 'local-only';
 let syncMessage = '';
@@ -87,10 +92,12 @@ let pendingStartDirection = null;
 let lastHeading = { x: 1, y: 0 };
 let food = null;
 let coin = null;
+let heart = null;
 let obstacles = [];
 let tunnels = [];
 let score = 0;
 let bankedRunCoins = 0;
+let lives = 3;
 let levelIndex = 0;
 let levelFood = 0;
 let usedShield = false;
@@ -251,12 +258,14 @@ function resetGameState(autoStart = false, options = {}) {
   lastTime = 0;
   tunnelCooldown = 0;
   coin = null;
+  heart = null;
+  lives = STARTING_LIVES;
   applyLevel();
   centerSnake();
   food = randomFreeCell();
   setPhase(PHASE.READY);
   if (autoStart) beginCountdown(defaultStartDirection());
-  else setOverlay('Ready', 'Press Start for a short countdown. Then swipe on the board to steer while the snake launches to the right.', true, PHASE.READY);
+  else setOverlay('Ready', 'Press Start when you're ready.', true, PHASE.READY);
   updateUi();
   draw();
   if (!options.skipSync) syncProfileToCloud(false, options.reason || 'reset');
@@ -272,6 +281,7 @@ function resetBoardForLevel(phaseAfterReset = PHASE.READY) {
   centerSnake();
   food = randomFreeCell();
   coin = null;
+  heart = null;
   setPhase(phaseAfterReset);
   draw();
 }
@@ -287,7 +297,7 @@ function beginCountdown(dir = defaultStartDirection(), durationMs = 3000) {
   countdownRemaining = Math.max(1, Math.ceil(durationMs / 1000));
   countdownUntil = performance.now() + durationMs;
   setPhase(PHASE.COUNTDOWN);
-  setOverlay(String(countdownRemaining), 'GET READY — red/green strobe means launch is coming. Movement begins after the countdown.', true, PHASE.COUNTDOWN);
+  setOverlay(String(countdownRemaining), 'Get ready.', true, PHASE.COUNTDOWN);
   updateUi();
   draw();
 }
@@ -337,8 +347,8 @@ function pauseGame(showOverlay = true) {
   countdownUntil = 0;
   if (showOverlay) {
     const text = pausedPhase === PHASE.COUNTDOWN
-      ? 'Tap play to resume the countdown, then keep steering with swipes on the board.'
-      : 'Tap play to resume, then keep steering with swipes on the board.';
+      ? 'Tap play to resume the countdown.'
+      : 'Tap play to resume.';
     setOverlay('Paused', text, true, PHASE.PAUSED);
   }
   updateUi();
@@ -512,11 +522,11 @@ function levelUp() {
     levelIndex += 1;
     levelFood = 0;
     resetBoardForLevel(PHASE.LEVEL_UP);
-    setOverlay(`Level ${levelIndex + 1}: ${activeLevel().name}`, 'Board reset. Choose Next level or Open shop, then steer with swipes when ready.', true, PHASE.LEVEL_UP);
+    setOverlay(`Level ${levelIndex + 1}: ${activeLevel().name}`, 'Board reset. Choose Next level or Open shop.', true, PHASE.LEVEL_UP);
     syncProfileToCloud(false, `level ${levelIndex + 1}`);
   } else {
     resetBoardForLevel(PHASE.LEVEL_UP);
-    setOverlay('Run cleared', 'You finished every level. Choose Next level or Open shop for another swipe-steered run.', true, PHASE.LEVEL_UP);
+    setOverlay('Run cleared', 'You finished every level. Choose Next level or Open shop.', true, PHASE.LEVEL_UP);
     syncProfileToCloud(false, 'run cleared');
   }
   updateUi();
@@ -531,9 +541,15 @@ async function awardCoin(amount) {
 
 function maybeSpawnCoin() {
   if (!coin && score > 0 && score % COIN_SPAWN_EVERY === 0) {
-    const pos = randomFreeCell([food]);
+    const pos = randomFreeCell([food, heart].filter(Boolean));
     coin = { x: pos.x, y: pos.y, life: COIN_LIFE_STEPS };
   }
+}
+
+function maybeSpawnHeart() {
+  if (heart || Math.random() > HEART_SPAWN_CHANCE) return;
+  const pos = randomFreeCell([food, coin].filter(Boolean));
+  heart = { x: pos.x, y: pos.y, life: HEART_LIFE_STEPS };
 }
 
 function consumeShield() {
@@ -557,7 +573,7 @@ async function step() {
   const hitSelf = snake.some((seg, index) => !(!willGrow && index === snake.length - 1 && sameCell(seg, tail)) && sameCell(seg, head));
   if (hitWall || hitObstacle || hitSelf) {
     if (consumeShield()) return;
-    return endGame();
+    return loseLife();
   }
   snake.unshift(head);
   applyTunnelTravel();
@@ -568,8 +584,9 @@ async function step() {
     levelFood += 1;
     grew = true;
     if (score > profile.best) mutateProfile((draft) => ({ ...draft, best: score }), { reason: 'new best' });
-    food = randomFreeCell(coin ? [coin] : []);
+    food = randomFreeCell([coin, heart].filter(Boolean));
     maybeSpawnCoin();
+    maybeSpawnHeart();
     if (levelFood >= activeLevel().target) {
       levelUp();
       return;
@@ -580,10 +597,19 @@ async function step() {
     coin = null;
     await awardCoin(value);
   }
+  if (heart && sameCell(snake[0], heart)) {
+    heart = null;
+    lives += 1;
+    showToast('+1 life');
+  }
   if (!grew) snake.pop();
   if (coin) {
     coin.life -= 1;
     if (coin.life <= 0) coin = null;
+  }
+  if (heart) {
+    heart.life -= 1;
+    if (heart.life <= 0) heart = null;
   }
   updateUi();
   draw();
@@ -615,11 +641,21 @@ function isBlocked(cell, extra = []) {
   return [...snake, ...obstacles, ...tunnels.flatMap((pair) => [pair.a, pair.b]), ...extra].some((entry) => sameCell(entry, cell));
 }
 
-function endGame() {
-  const summary = `Score ${score}. Coins banked this run: +${bankedRunCoins}. Press Start when you want another run.`;
-  resetBoardForLevel(PHASE.DEAD);
-  setOverlay('Game over', summary, true, PHASE.DEAD);
-  syncProfileToCloud(false, 'death');
+function loseLife() {
+  lives = Math.max(0, lives - 1);
+  if (lives <= 0) {
+    const summary = `Score ${score}. Coins banked this run: +${bankedRunCoins}. Press Start again for a new run.`;
+    resetBoardForLevel(PHASE.DEAD);
+    setOverlay('Game over', summary, true, PHASE.DEAD);
+    syncProfileToCloud(false, 'death');
+    updateUi();
+    draw();
+    return;
+  }
+
+  resetBoardForLevel(PHASE.READY);
+  setOverlay('Life lost', `${lives} ${lives === 1 ? 'life' : 'lives'} left. Press Start to keep the run going.`, true, PHASE.READY);
+  showToast(`Life lost · ${lives} left`);
   updateUi();
   draw();
 }
@@ -629,6 +665,7 @@ function updateUi() {
   bestEl.textContent = String(profile.best);
   coinsEl.textContent = String(profile.coins);
   levelEl.textContent = String(levelIndex + 1);
+  livesEl.textContent = String(lives);
   speedPill.textContent = `Speed: ${getSpeed().toFixed(1)} tiles/sec`;
   goalPill.textContent = `Next level: ${Math.max(activeLevel().target - levelFood, 0)} food`;
   skinPill.textContent = `Skin: ${currentSkin().name}`;
@@ -686,6 +723,21 @@ function drawCoin() {
   ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.24, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = '#fde68a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.17, 0, Math.PI * 2); ctx.stroke();
 }
+function drawHeart() {
+  if (!heart) return;
+  const cx = heart.x * CELL + CELL / 2;
+  const cy = heart.y * CELL + CELL / 2 + 1;
+  ctx.fillStyle = 'rgba(248, 113, 113, 0.16)'; ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fb7185';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + CELL * 0.18);
+  ctx.bezierCurveTo(cx - CELL * 0.28, cy - CELL * 0.02, cx - CELL * 0.34, cy - CELL * 0.28, cx - CELL * 0.12, cy - CELL * 0.28);
+  ctx.bezierCurveTo(cx - CELL * 0.02, cy - CELL * 0.28, cx, cy - CELL * 0.18, cx, cy - CELL * 0.08);
+  ctx.bezierCurveTo(cx, cy - CELL * 0.18, cx + CELL * 0.02, cy - CELL * 0.28, cx + CELL * 0.12, cy - CELL * 0.28);
+  ctx.bezierCurveTo(cx + CELL * 0.34, cy - CELL * 0.28, cx + CELL * 0.28, cy - CELL * 0.02, cx, cy + CELL * 0.18);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.beginPath(); ctx.arc(cx - CELL * 0.08, cy - CELL * 0.14, CELL * 0.04, 0, Math.PI * 2); ctx.fill();
+}
 function drawTunnels() {
   tunnels.forEach((pair, index) => [pair.a, pair.b].forEach((cell) => {
     const cx = cell.x * CELL + CELL / 2;
@@ -721,7 +773,7 @@ function drawLevelBadge() {
   ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 18px system-ui'; ctx.fillText(`Level ${levelIndex + 1}: ${activeLevel().name}`, 18, 30);
   ctx.fillStyle = '#94a3b8'; ctx.font = '14px system-ui'; ctx.fillText(`Coins x${activeLevel().coinValue} • target ${activeLevel().target}`, 18, 48);
 }
-function draw() { ctx.clearRect(0, 0, SIZE, SIZE); drawBoard(); drawObstacles(); drawTunnels(); drawFood(); drawCoin(); drawSnake(); drawLevelBadge(); }
+function draw() { ctx.clearRect(0, 0, SIZE, SIZE); drawBoard(); drawObstacles(); drawTunnels(); drawFood(); drawCoin(); drawHeart(); drawSnake(); drawLevelBadge(); }
 
 function updateCountdown(now) {
   if (phase !== PHASE.COUNTDOWN) return;
@@ -729,7 +781,7 @@ function updateCountdown(now) {
   const nextCount = Math.max(0, Math.ceil(msLeft / 1000));
   if (nextCount !== countdownRemaining) {
     countdownRemaining = nextCount;
-    if (countdownRemaining > 0) setOverlay(String(countdownRemaining), 'GET READY — red/green strobe means launch is coming. Movement begins after the countdown.', true, PHASE.COUNTDOWN);
+    if (countdownRemaining > 0) setOverlay(String(countdownRemaining), 'Get ready.', true, PHASE.COUNTDOWN);
     updateUi();
   }
   if (msLeft <= 0) commitCountdownStart();
@@ -906,7 +958,7 @@ function wireEvents() {
   restartBtn.addEventListener('click', () => {
     const needsConfirm = phase !== PHASE.READY || score > 0 || levelIndex > 0;
     if (needsConfirm) {
-      const ok = window.confirm('Reset this run and return to the starting board?');
+      const ok = window.confirm('Restart the whole run from level 1 with 3 lives?');
       if (!ok) return;
     }
     resetGameState(false, { reason: 'restart' });
@@ -926,7 +978,7 @@ function wireEvents() {
   messageSecondaryBtn.addEventListener('click', () => openShop(true));
 
   resetProgressBtn.addEventListener('click', async () => {
-    const ok = window.confirm(currentUser ? 'Reset your progress everywhere? This removes coins, skins, upgrades, and best score.' : 'Reset progress on this device? This removes coins, skins, upgrades, and best score.');
+    const ok = window.confirm(currentUser ? 'Reset all progress everywhere? This clears best score, coins, skins, upgrades, and your current run.' : 'Reset all progress on this device? This clears best score, coins, skins, upgrades, and your current run.');
     if (!ok) return;
     profile = resetLocalProfile();
     if (currentUser) await syncProfileToCloud(true, 'progress reset');
