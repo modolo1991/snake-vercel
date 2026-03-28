@@ -32,6 +32,9 @@ const shopToggleBtn = document.getElementById('shopToggleBtn');
 const accountToggleBtn = document.getElementById('accountToggleBtn');
 
 const sheetBackdrop = document.getElementById('sheetBackdrop');
+const entryModal = document.getElementById('entryModal');
+const entrySignInBtn = document.getElementById('entrySignInBtn');
+const entryLocalBtn = document.getElementById('entryLocalBtn');
 const shopSheet = document.getElementById('shopSheet');
 const accountSheet = document.getElementById('accountSheet');
 const closeShopBtn = document.getElementById('closeShopBtn');
@@ -115,6 +118,7 @@ let activeShopTab = 'skins';
 let shopFeedbackTimer = 0;
 let pausedPhase = null;
 let pausedCountdownMs = 0;
+let entryChoiceOpen = true;
 
 boot();
 
@@ -126,7 +130,9 @@ async function boot() {
   updateBoardSize();
   requestAnimationFrame(loop);
   updateAuthButtons();
+  setEntryChoiceOpen(true);
   updateUi();
+  entrySignInBtn.focus();
 
   if (hasSupabaseConfig(config)) {
     try {
@@ -243,6 +249,27 @@ function centerSnake() {
 function clearAuthInputs() {
   authEmail.value = '';
   authPassword.value = '';
+}
+
+function setEntryChoiceOpen(isOpen) {
+  entryChoiceOpen = isOpen;
+  entryModal.classList.toggle('hidden', !isOpen);
+  entryModal.setAttribute('aria-hidden', String(!isOpen));
+}
+
+function continueWithLocalPlay() {
+  setEntryChoiceOpen(false);
+  closeSheets();
+  setOverlay('Ready', 'Press Start when you\'re ready.', true, PHASE.READY);
+  updateUi();
+}
+
+function continueToSignIn() {
+  setEntryChoiceOpen(false);
+  toggleAccountPanel(true);
+  setOverlay('Ready', 'Sign in when you want sync, or close the sheet and play locally.', true, PHASE.READY);
+  authEmail.focus();
+  updateUi();
 }
 
 function defaultStartDirection() {
@@ -805,6 +832,10 @@ function loop(timestamp) {
 }
 
 function handleKey(event) {
+  if (entryChoiceOpen) {
+    if (event.key === 'Escape') event.preventDefault();
+    return;
+  }
   if (isTypingTarget(event.target) || isTypingTarget(document.activeElement)) return;
   const key = event.key.toLowerCase();
   if (["arrowup","arrowdown","arrowleft","arrowright","w","a","s","d"," ","f","escape"].includes(key)) event.preventDefault();
@@ -929,10 +960,18 @@ function toggleAccountPanel(force) {
 
 function wireEvents() {
   canvas.addEventListener('pointerdown', (event) => {
+    if (entryChoiceOpen) {
+      event.preventDefault();
+      return;
+    }
     touchStart = { x: event.clientX, y: event.clientY };
     event.preventDefault();
   }, { passive: false });
   canvas.addEventListener('pointermove', (event) => {
+    if (entryChoiceOpen) {
+      event.preventDefault();
+      return;
+    }
     if (touchStart) {
       const dx = event.clientX - touchStart.x;
       const dy = event.clientY - touchStart.y;
@@ -944,6 +983,11 @@ function wireEvents() {
     event.preventDefault();
   }, { passive: false });
   canvas.addEventListener('pointerup', (event) => {
+    if (entryChoiceOpen) {
+      touchStart = null;
+      event.preventDefault();
+      return;
+    }
     if (touchStart) handleSwipe(touchStart.x, touchStart.y, event.clientX, event.clientY);
     touchStart = null;
     event.preventDefault();
@@ -951,6 +995,9 @@ function wireEvents() {
   canvas.addEventListener('pointercancel', () => { touchStart = null; }, { passive: true });
   canvas.addEventListener('touchstart', (event) => event.preventDefault(), { passive: false });
   canvas.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
+
+  entryLocalBtn.addEventListener('click', continueWithLocalPlay);
+  entrySignInBtn.addEventListener('click', continueToSignIn);
 
   playPauseBtn.addEventListener('click', togglePlayPause);
   shopTabSkins.addEventListener('click', () => setShopTab('skins'));

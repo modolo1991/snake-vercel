@@ -87,6 +87,19 @@
 
   <div class="sheet-backdrop hidden" id="sheetBackdrop"></div>
 
+  <section class="entry-modal" id="entryModal" aria-modal="true" role="dialog" aria-labelledby="entryTitle" aria-describedby="entryText">
+    <div class="entry-card">
+      <div class="entry-badge">🐍 Snake Deluxe</div>
+      <h2 id="entryTitle">How do you want to play?</h2>
+      <p id="entryText">Start instantly on this device, or sign in so your coins and progress can follow you across devices.</p>
+      <div class="entry-actions">
+        <button id="entrySignInBtn" type="button">Sign in or create account</button>
+        <button class="secondary" id="entryLocalBtn" type="button">Play on this device only</button>
+      </div>
+      <p class="entry-note">Local play still saves here in this browser. It just won’t sync anywhere else.</p>
+    </div>
+  </section>
+
   <section class="sheet hidden" id="shopSheet" aria-hidden="true">
     <div class="sheet-grab"></div>
     <div class="sheet-head">
@@ -146,7 +159,7 @@
         <div class="auth-secondary">
           <button class="ghost mini" id="magicLinkBtn">Email magic link instead</button>
         </div>
-        <p class="auth-note">Play without logging in if you want. Sign in only when you want this save on more than one device.</p>
+        <p class="auth-note">Sign in if you want your save to follow you across devices. If not, you can just play locally on this device.</p>
       </div>
 
       <div class="account-tools">

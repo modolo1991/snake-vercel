@@ -324,6 +324,57 @@ button:disabled { opacity: 0.58; cursor: default; transform: none; }
   backdrop-filter: blur(4px);
   z-index: 20;
 }
+.entry-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding:
+    max(16px, var(--safe-top))
+    max(16px, calc(16px + var(--safe-right)))
+    max(16px, calc(16px + var(--safe-bottom)))
+    max(16px, calc(16px + var(--safe-left)));
+  background: rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(8px);
+}
+.entry-card {
+  width: min(100%, 420px);
+  background: linear-gradient(180deg, rgba(12, 20, 35, 0.98), rgba(9, 16, 30, 0.98));
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 28px;
+  padding: 22px 18px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 14px;
+  text-align: center;
+}
+.entry-badge {
+  justify-self: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  color: #d7f2ff;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+.entry-card h2 {
+  margin: 0;
+  font-size: clamp(1.35rem, 5vw, 1.8rem);
+}
+.entry-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.entry-actions {
+  display: grid;
+  gap: 10px;
+}
+.entry-note {
+  font-size: 0.88rem;
+}
 .sheet {
   position: fixed;
   left: max(10px, calc(10px + var(--safe-left)));
@@ -479,6 +530,7 @@ input {
   .dock-main-actions button { min-height: 42px; padding: 9px 8px; font-size: 0.84rem; }
   .swipe-hint { font-size: 0.75rem; }
   .message-actions, .account-actions, .auth-actions, .auth-secondary { flex-direction: column; }
+  .entry-card { padding: 20px 16px; border-radius: 24px; }
   .account-tools { flex-direction: column; align-items: stretch; }
   .sheet { left: 6px; right: 6px; bottom: max(6px, calc(6px + var(--safe-bottom))); border-radius: 24px; }
 }
