@@ -10,47 +10,55 @@
 <body>
   <main class="app">
     <section class="shell">
-      <header class="app-header">
-        <div class="title-row">
-          <div class="title">
+      <header class="top-hud">
+        <div class="brand-block">
+          <div class="brand-mark">🐍</div>
+          <div class="brand-copy">
             <h1>Snake Deluxe</h1>
-            <div class="subtitle">Built for phones first: big board, tap controls, simple tabs, saved progress.</div>
+            <div class="hud-status" id="statePill">State: waiting</div>
           </div>
-          <button class="account-strip" id="accountToggleBtn" type="button" aria-expanded="false">
-            <div class="account-strip-copy">
-              <div class="section-title">Account</div>
-              <div class="account-status" id="accountStatus">Running in local-only mode.</div>
-              <div class="account-subtle" id="syncStatus">Add Supabase config to enable login and cross-device save sync.</div>
-            </div>
-            <div class="account-strip-side">
-              <span class="save-chip" id="saveChip">Local only</span>
-              <span class="account-chevron">▾</span>
-            </div>
-          </button>
         </div>
 
-        <div class="stat-grid compact-stats">
-          <div class="card"><span class="label">Score</span><span class="value" id="score">0</span></div>
-          <div class="card"><span class="label">Best</span><span class="value" id="best">0</span></div>
-          <div class="card"><span class="label">Coins</span><span class="value" id="coins">0</span></div>
-          <div class="card"><span class="label">Level</span><span class="value" id="level">1</span></div>
+        <div class="hud-stats">
+          <div class="hud-chip">
+            <span class="label">Score</span>
+            <span class="value" id="score">0</span>
+          </div>
+          <div class="hud-chip">
+            <span class="label">Coins</span>
+            <span class="value" id="coins">0</span>
+          </div>
+          <div class="hud-chip">
+            <span class="label">Best</span>
+            <span class="value" id="best">0</span>
+          </div>
+          <div class="hud-chip">
+            <span class="label">Lvl</span>
+            <span class="value" id="level">1</span>
+          </div>
         </div>
 
-        <nav class="tabbar" aria-label="Main sections">
-          <button class="tab active" id="tabBtnGame" data-tab="game" type="button">Game</button>
-          <button class="tab" id="tabBtnShop" data-tab="shop" type="button">Shop</button>
-          <button class="tab" id="tabBtnAccount" data-tab="account" type="button">Account</button>
-        </nav>
+        <div class="hud-actions">
+          <button class="icon-btn" id="shopToggleBtn" type="button" aria-label="Open shop and loadout">🛒</button>
+          <button class="icon-btn" id="accountToggleBtn" type="button" aria-expanded="false" aria-label="Open account and save options">☰</button>
+        </div>
       </header>
 
-      <section class="tab-panel active" id="tabPanelGame" data-panel="game">
-        <div class="board-wrap">
+      <section class="board-stage">
+        <div class="board-frame">
+          <div class="board-topline">
+            <div class="mini-pill" id="goalPill">Next level: 6 food</div>
+            <div class="mini-pill" id="speedPill">Speed: 7.2</div>
+            <div class="mini-pill" id="skinPill">Skin: Mint</div>
+            <div class="mini-pill" id="saveModePill">Save: local only</div>
+          </div>
+
           <section class="board-shell">
             <canvas id="game" width="720" height="720" aria-label="Snake game board"></canvas>
             <div class="overlay" id="overlay">
               <div class="message">
                 <h2 id="messageTitle">Ready?</h2>
-                <p id="messageText">Tap play or an arrow to start. Swipe also works on the board.</p>
+                <p id="messageText">Tap an arrow to start. Swipe on the board also works.</p>
                 <div class="message-actions hidden" id="messageActions">
                   <button id="messagePrimaryBtn">Continue</button>
                   <button class="secondary" id="messageSecondaryBtn">Open shop</button>
@@ -60,103 +68,99 @@
             <div class="toast hidden" id="toast"></div>
           </section>
         </div>
+      </section>
 
-        <div class="meta-strip">
-          <div class="pill" id="speedPill">Speed: 7.2</div>
-          <div class="pill" id="statePill">State: waiting</div>
-          <div class="pill" id="goalPill">Next level: 6 food</div>
-          <div class="pill" id="skinPill">Skin: Mint</div>
-          <div class="pill" id="saveModePill">Save: local only</div>
-        </div>
-
-        <div class="actions game-actions">
+      <footer class="control-dock">
+        <div class="dock-main-actions">
           <button id="playPauseBtn">Play</button>
           <button class="secondary" id="restartBtn">Restart</button>
-          <button class="ghost" id="shopToggleBtn">Shop</button>
-          <button class="ghost hide-mobile-ui" id="fullscreenBtn">Full screen</button>
+          <button class="ghost" id="pauseBtn">Pause</button>
+          <button class="ghost desktop-only" id="fullscreenBtn">Full screen</button>
         </div>
 
-        <div class="touchpad-card">
-          <div class="touchpad-head">
-            <div>
-              <div class="touchpad-title">Tap controls</div>
-              <div class="touchpad-note">Recommended on iPhone and other phones.</div>
-            </div>
-            <button class="ghost mini" id="pauseBtn">Pause</button>
+        <div class="touch-cluster" aria-label="Touch controls">
+          <div class="touch-row touch-row-top">
+            <button class="dir" data-dir="up" aria-label="Up">▲</button>
           </div>
-          <div class="touchpad" aria-label="Touch controls">
-            <div class="touch-row"><button class="dir" data-dir="up" aria-label="Up">▲</button></div>
-            <div class="touch-row">
-              <button class="dir" data-dir="left" aria-label="Left">◀</button>
-              <button class="dir" data-dir="down" aria-label="Down">▼</button>
-              <button class="dir" data-dir="right" aria-label="Right">▶</button>
-            </div>
+          <div class="touch-row touch-row-bottom">
+            <button class="dir" data-dir="left" aria-label="Left">◀</button>
+            <button class="dock-center-badge" type="button" disabled>
+              <span>Tap to steer</span>
+              <small>No auto start drift</small>
+            </button>
+            <button class="dir" data-dir="right" aria-label="Right">▶</button>
+          </div>
+          <div class="touch-row touch-row-down">
+            <button class="dir" data-dir="down" aria-label="Down">▼</button>
           </div>
         </div>
-
-        <div class="help compact-help">
-          Tap the arrows to steer. Apples raise score, coins buy upgrades, and purple holes are tunnel pairs.
-        </div>
-      </section>
-
-      <section class="tab-panel" id="tabPanelShop" data-panel="shop">
-        <section class="shop" id="shopPanel">
-          <div class="row shop-head">
-            <div>
-              <h3>Shop & loadout</h3>
-              <p class="shop-note" id="shopNote">Best used between levels. Skins and upgrades save locally now and can sync per-user once Supabase is configured.</p>
-            </div>
-            <div class="quick-shop">
-              <button class="ghost mini" id="closeShopBtn">Back to game</button>
-            </div>
-          </div>
-          <div class="items" id="shopItems"></div>
-        </section>
-      </section>
-
-      <section class="tab-panel" id="tabPanelAccount" data-panel="account">
-        <section class="account-shell">
-          <div class="account-panel" id="accountPanel">
-            <div class="account-actions" id="accountActionsSignedOut">
-              <button id="signInPrimaryBtn">Sign in</button>
-              <button class="secondary" id="signUpPrimaryBtn">Create account</button>
-            </div>
-
-            <div class="account-actions hidden" id="accountActionsSignedIn">
-              <button class="secondary mini" id="syncNowBtn">Sync now</button>
-              <button class="ghost mini" id="signOutBtn">Sign out</button>
-            </div>
-
-            <div class="auth-panel" id="authPanel">
-              <div class="auth-grid">
-                <label>
-                  <span>Email</span>
-                  <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com" />
-                </label>
-                <label>
-                  <span>Password</span>
-                  <input id="authPassword" type="password" autocomplete="current-password" placeholder="At least 8 characters" />
-                </label>
-              </div>
-              <div class="auth-actions">
-                <button id="signInBtn">Sign in</button>
-                <button class="secondary" id="signUpBtn">Create account</button>
-              </div>
-              <div class="auth-secondary">
-                <button class="ghost mini" id="magicLinkBtn">Email magic link instead</button>
-              </div>
-              <p class="auth-note">Your progress stays local if you do nothing. Sign in if you want saves to sync across devices.</p>
-            </div>
-
-            <div class="account-tools">
-              <div class="help left">Need a clean slate? This removes coins, skins, upgrades, and best score.</div>
-              <button class="ghost" id="resetProgressBtn">Start fresh</button>
-            </div>
-          </div>
-        </section>
-      </section>
+      </footer>
     </section>
   </main>
+
+  <div class="sheet-backdrop hidden" id="sheetBackdrop"></div>
+
+  <section class="sheet hidden" id="shopSheet" aria-hidden="true">
+    <div class="sheet-grab"></div>
+    <div class="sheet-head">
+      <div>
+        <h3>Shop & loadout</h3>
+        <p class="sheet-note" id="shopNote">Best used between levels.</p>
+      </div>
+      <button class="ghost mini" id="closeShopBtn" type="button">Done</button>
+    </div>
+    <div class="items" id="shopItems"></div>
+  </section>
+
+  <section class="sheet hidden" id="accountSheet" aria-hidden="true">
+    <div class="sheet-grab"></div>
+    <div class="sheet-head">
+      <div>
+        <h3>Account & save</h3>
+        <p class="sheet-note" id="accountStatus">Running in local-only mode.</p>
+        <p class="sheet-subtle" id="syncStatus">Add Supabase config to enable login and sync.</p>
+      </div>
+      <button class="ghost mini" id="closeAccountBtn" type="button">Done</button>
+    </div>
+
+    <div class="account-panel" id="accountPanel">
+      <div class="account-actions" id="accountActionsSignedOut">
+        <button id="signInPrimaryBtn">Sign in</button>
+        <button class="secondary" id="signUpPrimaryBtn">Create account</button>
+      </div>
+
+      <div class="account-actions hidden" id="accountActionsSignedIn">
+        <button class="secondary mini" id="syncNowBtn">Sync now</button>
+        <button class="ghost mini" id="signOutBtn">Sign out</button>
+      </div>
+
+      <div class="auth-panel" id="authPanel">
+        <div class="auth-grid">
+          <label>
+            <span>Email</span>
+            <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com" />
+          </label>
+          <label>
+            <span>Password</span>
+            <input id="authPassword" type="password" autocomplete="current-password" placeholder="At least 8 characters" />
+          </label>
+        </div>
+        <div class="auth-actions">
+          <button id="signInBtn">Sign in</button>
+          <button class="secondary" id="signUpBtn">Create account</button>
+        </div>
+        <div class="auth-secondary">
+          <button class="ghost mini" id="magicLinkBtn">Email magic link instead</button>
+        </div>
+        <p class="auth-note">Local play works without login. Sign in only if you want synced saves across devices.</p>
+      </div>
+
+      <div class="account-tools">
+        <div class="help left">Need a clean slate? This removes coins, skins, upgrades, and best score.</div>
+        <button class="ghost" id="resetProgressBtn">Start fresh</button>
+      </div>
+    </div>
+  </section>
 
   <script src="./app-config.js"></script>
   <script type="module" src="./js/main.js"></script>
