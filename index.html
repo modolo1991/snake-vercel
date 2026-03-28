@@ -10,128 +10,151 @@
 <body>
   <main class="app">
     <section class="shell">
-      <div class="topbar">
-        <div class="title">
-          <h1>Snake Deluxe</h1>
-          <div class="subtitle">Phone-first Snake with saved progress, auth, coins, unlocks, tunnels, and harder levels.</div>
+      <header class="app-header">
+        <div class="title-row">
+          <div class="title">
+            <h1>Snake Deluxe</h1>
+            <div class="subtitle">Built for phones first: big board, tap controls, simple tabs, saved progress.</div>
+          </div>
+          <button class="account-strip" id="accountToggleBtn" type="button" aria-expanded="false">
+            <div class="account-strip-copy">
+              <div class="section-title">Account</div>
+              <div class="account-status" id="accountStatus">Running in local-only mode.</div>
+              <div class="account-subtle" id="syncStatus">Add Supabase config to enable login and cross-device save sync.</div>
+            </div>
+            <div class="account-strip-side">
+              <span class="save-chip" id="saveChip">Local only</span>
+              <span class="account-chevron">▾</span>
+            </div>
+          </button>
         </div>
-        <div class="stat-grid">
+
+        <div class="stat-grid compact-stats">
           <div class="card"><span class="label">Score</span><span class="value" id="score">0</span></div>
           <div class="card"><span class="label">Best</span><span class="value" id="best">0</span></div>
           <div class="card"><span class="label">Coins</span><span class="value" id="coins">0</span></div>
           <div class="card"><span class="label">Level</span><span class="value" id="level">1</span></div>
         </div>
-      </div>
 
-      <section class="account-shell">
-        <button class="account-summary account-toggle" id="accountToggleBtn" type="button" aria-expanded="false">
-          <div>
-            <div class="section-title">Save progress</div>
-            <div class="account-status" id="accountStatus">Running in local-only mode.</div>
-            <div class="account-subtle" id="syncStatus">Add Supabase config to enable login and cross-device save sync.</div>
-          </div>
-          <div class="account-summary-side">
-            <span class="save-chip" id="saveChip">Local only</span>
-            <span class="account-chevron">▾</span>
-          </div>
-        </button>
+        <nav class="tabbar" aria-label="Main sections">
+          <button class="tab active" id="tabBtnGame" data-tab="game" type="button">Game</button>
+          <button class="tab" id="tabBtnShop" data-tab="shop" type="button">Shop</button>
+          <button class="tab" id="tabBtnAccount" data-tab="account" type="button">Account</button>
+        </nav>
+      </header>
 
-        <div class="account-panel hidden" id="accountPanel">
-          <div class="account-actions" id="accountActionsSignedOut">
-            <button id="signInPrimaryBtn">Sign in</button>
-            <button class="secondary" id="signUpPrimaryBtn">Create account</button>
-          </div>
-
-          <div class="account-actions hidden" id="accountActionsSignedIn">
-            <button class="secondary mini" id="syncNowBtn">Sync now</button>
-            <button class="ghost mini" id="signOutBtn">Sign out</button>
-          </div>
-
-          <div class="auth-panel" id="authPanel">
-            <div class="auth-grid">
-              <label>
-                <span>Email</span>
-                <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com" />
-              </label>
-              <label>
-                <span>Password</span>
-                <input id="authPassword" type="password" autocomplete="current-password" placeholder="At least 8 characters" />
-              </label>
-            </div>
-            <div class="auth-actions">
-              <button id="signInBtn">Sign in</button>
-              <button class="secondary" id="signUpBtn">Create account</button>
-            </div>
-            <div class="auth-secondary">
-              <button class="ghost mini" id="magicLinkBtn">Email magic link instead</button>
-            </div>
-            <p class="auth-note">If Supabase auth is enabled, progress syncs to your account. Without config, the game still works locally on this device.</p>
-          </div>
-        </div>
-      </section>
-
-      <div class="board-wrap">
-        <section class="board-shell">
-          <canvas id="game" width="720" height="720" aria-label="Snake game board"></canvas>
-          <div class="overlay" id="overlay">
-            <div class="message">
-              <h2 id="messageTitle">Ready?</h2>
-              <p id="messageText">Tap play, swipe on the board, or press a direction to start.</p>
-              <div class="message-actions hidden" id="messageActions">
-                <button id="messagePrimaryBtn">Continue</button>
-                <button class="secondary" id="messageSecondaryBtn">Open shop</button>
+      <section class="tab-panel active" id="tabPanelGame" data-panel="game">
+        <div class="board-wrap">
+          <section class="board-shell">
+            <canvas id="game" width="720" height="720" aria-label="Snake game board"></canvas>
+            <div class="overlay" id="overlay">
+              <div class="message">
+                <h2 id="messageTitle">Ready?</h2>
+                <p id="messageText">Tap play or an arrow to start. Swipe also works on the board.</p>
+                <div class="message-actions hidden" id="messageActions">
+                  <button id="messagePrimaryBtn">Continue</button>
+                  <button class="secondary" id="messageSecondaryBtn">Open shop</button>
+                </div>
               </div>
             </div>
-          </div>
-          <div class="toast hidden" id="toast"></div>
-        </section>
-      </div>
+            <div class="toast hidden" id="toast"></div>
+          </section>
+        </div>
 
-      <div class="row">
-        <div class="meta">
+        <div class="meta-strip">
           <div class="pill" id="speedPill">Speed: 7.2</div>
           <div class="pill" id="statePill">State: waiting</div>
           <div class="pill" id="goalPill">Next level: 6 food</div>
           <div class="pill" id="skinPill">Skin: Mint</div>
           <div class="pill" id="saveModePill">Save: local only</div>
         </div>
-        <div class="actions">
+
+        <div class="actions game-actions">
           <button id="playPauseBtn">Play</button>
           <button class="secondary" id="restartBtn">Restart</button>
           <button class="ghost" id="shopToggleBtn">Shop</button>
-          <button class="ghost" id="resetProgressBtn">Start fresh</button>
           <button class="ghost hide-mobile-ui" id="fullscreenBtn">Full screen</button>
         </div>
-      </div>
 
-      <div class="controls">
-        <div class="touchpad" aria-label="Touch controls">
-          <div class="touch-row"><button class="dir" data-dir="up" aria-label="Up">▲</button></div>
-          <div class="touch-row">
-            <button class="dir" data-dir="left" aria-label="Left">◀</button>
-            <button class="dir" data-dir="down" aria-label="Down">▼</button>
-            <button class="dir" data-dir="right" aria-label="Right">▶</button>
+        <div class="touchpad-card">
+          <div class="touchpad-head">
+            <div>
+              <div class="touchpad-title">Tap controls</div>
+              <div class="touchpad-note">Recommended on iPhone and other phones.</div>
+            </div>
+            <button class="ghost mini" id="pauseBtn">Pause</button>
+          </div>
+          <div class="touchpad" aria-label="Touch controls">
+            <div class="touch-row"><button class="dir" data-dir="up" aria-label="Up">▲</button></div>
+            <div class="touch-row">
+              <button class="dir" data-dir="left" aria-label="Left">◀</button>
+              <button class="dir" data-dir="down" aria-label="Down">▼</button>
+              <button class="dir" data-dir="right" aria-label="Right">▶</button>
+            </div>
           </div>
         </div>
 
-        <section class="shop hidden" id="shopPanel">
+        <div class="help compact-help">
+          Tap the arrows to steer. Apples raise score, coins buy upgrades, and purple holes are tunnel pairs.
+        </div>
+      </section>
+
+      <section class="tab-panel" id="tabPanelShop" data-panel="shop">
+        <section class="shop" id="shopPanel">
           <div class="row shop-head">
             <div>
               <h3>Shop & loadout</h3>
               <p class="shop-note" id="shopNote">Best used between levels. Skins and upgrades save locally now and can sync per-user once Supabase is configured.</p>
             </div>
             <div class="quick-shop">
-              <button class="ghost mini" id="pauseBtn">Pause</button>
-              <button class="ghost mini" id="closeShopBtn">Done</button>
+              <button class="ghost mini" id="closeShopBtn">Back to game</button>
             </div>
           </div>
           <div class="items" id="shopItems"></div>
         </section>
-      </div>
+      </section>
 
-      <div class="help">
-        Swipe on the board or use the big arrows. Apples grow score, coins buy skins and power-ups, purple holes are tunnel pairs, and each level adds speed or hazards.
-      </div>
+      <section class="tab-panel" id="tabPanelAccount" data-panel="account">
+        <section class="account-shell">
+          <div class="account-panel" id="accountPanel">
+            <div class="account-actions" id="accountActionsSignedOut">
+              <button id="signInPrimaryBtn">Sign in</button>
+              <button class="secondary" id="signUpPrimaryBtn">Create account</button>
+            </div>
+
+            <div class="account-actions hidden" id="accountActionsSignedIn">
+              <button class="secondary mini" id="syncNowBtn">Sync now</button>
+              <button class="ghost mini" id="signOutBtn">Sign out</button>
+            </div>
+
+            <div class="auth-panel" id="authPanel">
+              <div class="auth-grid">
+                <label>
+                  <span>Email</span>
+                  <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com" />
+                </label>
+                <label>
+                  <span>Password</span>
+                  <input id="authPassword" type="password" autocomplete="current-password" placeholder="At least 8 characters" />
+                </label>
+              </div>
+              <div class="auth-actions">
+                <button id="signInBtn">Sign in</button>
+                <button class="secondary" id="signUpBtn">Create account</button>
+              </div>
+              <div class="auth-secondary">
+                <button class="ghost mini" id="magicLinkBtn">Email magic link instead</button>
+              </div>
+              <p class="auth-note">Your progress stays local if you do nothing. Sign in if you want saves to sync across devices.</p>
+            </div>
+
+            <div class="account-tools">
+              <div class="help left">Need a clean slate? This removes coins, skins, upgrades, and best score.</div>
+              <button class="ghost" id="resetProgressBtn">Start fresh</button>
+            </div>
+          </div>
+        </section>
+      </section>
     </section>
   </main>
 

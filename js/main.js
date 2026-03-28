@@ -36,6 +36,8 @@ const accountStatus = document.getElementById('accountStatus');
 const syncStatus = document.getElementById('syncStatus');
 const accountToggleBtn = document.getElementById('accountToggleBtn');
 const accountPanel = document.getElementById('accountPanel');
+const tabButtons = [...document.querySelectorAll('[data-tab]')];
+const tabPanels = [...document.querySelectorAll('[data-panel]')];
 const signInPrimaryBtn = document.getElementById('signInPrimaryBtn');
 const signUpPrimaryBtn = document.getElementById('signUpPrimaryBtn');
 const authEmail = document.getElementById('authEmail');
@@ -81,10 +83,12 @@ let touchStart = null;
 let tunnelCooldown = 0;
 let overlayMode = 'ready';
 let toastTimer = 0;
+let activeTab = 'game';
 
 boot();
 
 async function boot() {
+  setActiveTab('game');
   renderShop();
   resetGame(false);
   wireEvents();
@@ -178,7 +182,7 @@ function resetGame(autoStart = false) {
   updateUi();
   draw();
   if (autoStart) startLevelFromInput({ x: 1, y: 0 });
-  else setOverlay('Ready?', 'Swipe or tap a direction to start. The snake waits for your first move.', true, 'ready');
+  else setOverlay('Ready?', 'Tap an arrow to start. Swipe on the board also works if you want it.', true, 'ready');
 }
 
 function applyLevel() {
@@ -200,7 +204,7 @@ function startGame() {
     return;
   }
   if (isStationary()) {
-    setOverlay('Choose a direction', 'Swipe or tap an arrow to begin this level.', true, overlayMode);
+    setOverlay('Choose a direction', 'Tap an arrow to begin this level. Swipe still works on the board.', true, overlayMode);
     return;
   }
   started = true;
@@ -222,7 +226,7 @@ function startLevelFromInput(dir) {
 function pauseGame(showOverlay = true) {
   if ((!started && !gameOver) || gameOver) return;
   running = false;
-  if (showOverlay) setOverlay('Paused', 'Tap play or choose a direction to resume.', true, 'pause');
+  if (showOverlay) setOverlay('Paused', 'Tap play or use the arrows to resume.', true, 'pause');
   updateUi();
 }
 
@@ -491,7 +495,7 @@ function updateUi() {
   statePill.textContent = `State: ${state}`;
   playPauseBtn.textContent = gameOver ? 'Play again' : (running ? 'Pause' : 'Play');
   pauseBtn.textContent = running ? 'Pause' : 'Play';
-  shopToggleBtn.textContent = shopPanel.classList.contains('hidden') ? 'Shop' : 'Hide shop';
+  shopToggleBtn.textContent = activeTab === 'shop' ? 'Game' : 'Shop';
   shopNote.textContent = running ? 'You can browse now, but it feels best between levels.' : 'Good time to change skins or enable upgrades before the next run.';
 
   if (currentUser) {
@@ -609,8 +613,21 @@ function handleSwipe(startX, startY, endX, endY) {
   else setDirection(0, dy > 0 ? 1 : -1);
 }
 
-function updateViewportHeight() { document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`); }
+function updateViewportHeight() {
+  const viewportHeight = window.visualViewport?.height || window.innerHeight;
+  document.documentElement.style.setProperty('--vh', `${viewportHeight * 0.01}px`);
+}
 async function goFullscreen() { const el = document.documentElement; if (!document.fullscreenElement && el.requestFullscreen) try { await el.requestFullscreen({ navigationUI: 'hide' }); } catch {} }
+function setActiveTab(tab) {
+  activeTab = tab;
+  tabButtons.forEach((button) => {
+    const selected = button.dataset.tab === tab;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-selected', String(selected));
+  });
+  tabPanels.forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === tab));
+  accountToggleBtn.setAttribute('aria-expanded', String(tab === 'account'));
+}
 function updateAuthButtons() {
   accountActionsSignedOut.classList.toggle('hidden', Boolean(currentUser));
   accountActionsSignedIn.classList.toggle('hidden', !currentUser);
@@ -671,34 +688,46 @@ function isTypingTarget(target) {
 
 function openShop(force = false) {
   if (running && !force) pauseGame(false);
-  shopPanel.classList.remove('hidden');
+  setActiveTab('shop');
   updateUi();
 }
 
 function closeShop() {
-  shopPanel.classList.add('hidden');
+  setActiveTab('game');
   updateUi();
 }
 
 function toggleShop() {
-  if (shopPanel.classList.contains('hidden')) openShop();
-  else closeShop();
+  if (activeTab === 'shop') closeShop();
+  else openShop();
 }
 
 function toggleAccountPanel(force) {
-  const open = typeof force === 'boolean' ? force : accountPanel.classList.contains('hidden');
-  accountPanel.classList.toggle('hidden', !open);
-  accountToggleBtn.setAttribute('aria-expanded', String(open));
+  const open = typeof force === 'boolean' ? force : activeTab !== 'account';
+  setActiveTab(open ? 'account' : 'game');
 }
 
 function wireEvents() {
-  canvas.addEventListener('pointerdown', (event) => { touchStart = { x: event.clientX, y: event.clientY }; }, { passive: true });
-  canvas.addEventListener('pointerup', (event) => { if (touchStart) handleSwipe(touchStart.x, touchStart.y, event.clientX, event.clientY); touchStart = null; }, { passive: true });
+  canvas.addEventListener('pointerdown', (event) => {
+    touchStart = { x: event.clientX, y: event.clientY };
+    event.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener('pointermove', (event) => {
+    event.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener('pointerup', (event) => {
+    if (touchStart) handleSwipe(touchStart.x, touchStart.y, event.clientX, event.clientY);
+    touchStart = null;
+    event.preventDefault();
+  }, { passive: false });
   canvas.addEventListener('pointercancel', () => { touchStart = null; }, { passive: true });
+  canvas.addEventListener('touchstart', (event) => event.preventDefault(), { passive: false });
+  canvas.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
   document.querySelectorAll('[data-dir]').forEach((button) => button.addEventListener('click', () => {
     const dir = button.dataset.dir;
     if (dir === 'up') setDirection(0, -1); else if (dir === 'down') setDirection(0, 1); else if (dir === 'left') setDirection(-1, 0); else if (dir === 'right') setDirection(1, 0);
   }));
+  tabButtons.forEach((button) => button.addEventListener('click', () => setActiveTab(button.dataset.tab)));
   playPauseBtn.addEventListener('click', togglePlayPause);
   restartBtn.addEventListener('click', () => resetGame(false));
   pauseBtn.addEventListener('click', togglePlayPause);
@@ -707,7 +736,7 @@ function wireEvents() {
   closeShopBtn.addEventListener('click', closeShop);
   messagePrimaryBtn.addEventListener('click', () => {
     closeShop();
-    setOverlay('Choose a direction', 'Swipe or tap an arrow to start this level.', true, 'ready');
+    setOverlay('Choose a direction', 'Tap an arrow to start this level. Swipe still works on the board.', true, 'ready');
   });
   messageSecondaryBtn.addEventListener('click', () => openShop(true));
   resetProgressBtn.addEventListener('click', async () => {
@@ -765,5 +794,6 @@ function wireEvents() {
   window.addEventListener('keydown', handleKey, { passive: false });
   window.addEventListener('resize', updateViewportHeight);
   window.addEventListener('orientationchange', updateViewportHeight);
+  window.visualViewport?.addEventListener('resize', updateViewportHeight);
   document.addEventListener('visibilitychange', () => { if (document.hidden && running) pauseGame(false); });
 }
