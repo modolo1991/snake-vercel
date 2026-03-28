@@ -102,7 +102,7 @@ button, input, canvas { font: inherit; }
   gap: 6px;
   min-width: 0;
 }
-.hud-chip, .mini-pill, .sheet, .icon-btn, .dock-center-badge, .item {
+.hud-chip, .mini-pill, .sheet, .icon-btn, .item {
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.08);
 }
@@ -265,58 +265,21 @@ button:disabled { opacity: 0.58; cursor: default; transform: none; }
   background: linear-gradient(180deg, rgba(13, 23, 40, 0.9), rgba(9, 16, 30, 0.95));
   border: 1px solid var(--line);
 }
+.compact-dock {
+  gap: 8px;
+  padding: 8px 10px 10px;
+}
 .dock-main-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
-.touch-cluster {
-  display: grid;
-  gap: 6px;
-  justify-items: center;
-}
-.touch-row {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-  width: 100%;
-}
-.touch-row-top, .touch-row-down { margin: 0; }
-.dir {
-  width: min(20vw, 88px);
-  min-width: 64px;
-  min-height: 50px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  font-size: 1.2rem;
-  background: rgba(255,255,255,0.07);
-  color: var(--text);
-  border: 1px solid rgba(255,255,255,0.08);
-  box-shadow: none;
-  touch-action: manipulation;
-}
-.dock-center-badge {
-  width: min(34vw, 176px);
-  min-width: 120px;
-  min-height: 50px;
-  border-radius: 18px;
+.swipe-hint {
+  margin: 0;
   color: var(--muted);
-  padding: 8px;
-  display: grid;
-  place-items: center;
+  font-size: 0.84rem;
+  line-height: 1.35;
   text-align: center;
-}
-.dock-center-badge span {
-  font-weight: 800;
-  font-size: 0.9rem;
-  color: var(--text);
-}
-.dock-center-badge small {
-  display: block;
-  margin-top: 2px;
-  font-size: 0.72rem;
-  color: var(--muted);
 }
 .sheet-backdrop {
   position: fixed;
@@ -441,8 +404,7 @@ input {
   .value { font-size: 0.96rem; }
   .dock-main-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dock-main-actions .desktop-only { display: none !important; }
-  .dir { width: min(23vw, 84px); min-width: 62px; min-height: 48px; }
-  .dock-center-badge { width: min(36vw, 150px); min-width: 110px; min-height: 48px; }
+  .swipe-hint { font-size: 0.8rem; }
   .items, .auth-grid { grid-template-columns: 1fr; }
 }
 
@@ -459,10 +421,7 @@ input {
   .control-dock { padding: 7px; border-radius: 18px; }
   .dock-main-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .dock-main-actions button { min-height: 42px; padding: 9px 8px; font-size: 0.84rem; }
-  .dir { width: min(24vw, 76px); min-width: 58px; min-height: 46px; font-size: 1.15rem; }
-  .dock-center-badge { width: min(34vw, 124px); min-width: 96px; min-height: 46px; padding: 7px; }
-  .dock-center-badge span { font-size: 0.74rem; }
-  .dock-center-badge small { font-size: 0.62rem; }
+  .swipe-hint { font-size: 0.75rem; }
   .message-actions, .account-actions, .auth-actions, .auth-secondary { flex-direction: column; }
   .account-tools { flex-direction: column; align-items: stretch; }
   .sheet { left: 6px; right: 6px; bottom: max(6px, calc(6px + var(--safe-bottom))); border-radius: 24px; }

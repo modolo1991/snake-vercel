@@ -264,7 +264,7 @@ function resetGameState(autoStart = false, options = {}) {
   food = randomFreeCell();
   setPhase(PHASE.READY);
   if (autoStart) beginCountdown(randomStartDirection());
-  else setOverlay('Ready', 'Press Start for a short countdown. The snake will launch in a random valid direction.', true, PHASE.READY);
+  else setOverlay('Ready', 'Press Start for a short countdown. Then swipe on the board to steer while the snake launches in a random valid direction.', true, PHASE.READY);
   updateUi();
   draw();
   if (!options.skipSync) syncProfileToCloud(false, options.reason || 'reset');
@@ -293,7 +293,7 @@ function beginCountdown(dir) {
   countdownRemaining = 3;
   countdownUntil = performance.now() + countdownRemaining * 1000;
   setPhase(PHASE.COUNTDOWN);
-  setOverlay('Starting in 3', 'Get ready. Movement begins after the countdown.', true, PHASE.COUNTDOWN);
+  setOverlay('Starting in 3', 'Get ready. Movement begins after the countdown, then you steer by swiping on the board.', true, PHASE.COUNTDOWN);
   updateUi();
   draw();
 }
@@ -332,7 +332,7 @@ function pauseGame(showOverlay = true) {
   countdownRemaining = 0;
   countdownUntil = 0;
   pendingStartDirection = null;
-  if (showOverlay) setOverlay('Paused', 'Tap play or any direction to keep going.', true, PHASE.PAUSED);
+  if (showOverlay) setOverlay('Paused', 'Tap play to resume, then keep steering with swipes on the board.', true, PHASE.PAUSED);
   updateUi();
 }
 
@@ -491,11 +491,11 @@ function levelUp() {
     levelFood = 0;
     resetBoardForLevel(PHASE.LEVEL_UP);
     openShop(true);
-    setOverlay(`Level ${levelIndex + 1}: ${activeLevel().name}`, 'Board reset. Shop if you want, then pick a direction when ready.', true, PHASE.LEVEL_UP);
+    setOverlay(`Level ${levelIndex + 1}: ${activeLevel().name}`, 'Board reset. Shop if you want, then press Start and steer with swipes when ready.', true, PHASE.LEVEL_UP);
     syncProfileToCloud(false, `level ${levelIndex + 1}`);
   } else {
     resetBoardForLevel(PHASE.LEVEL_UP);
-    setOverlay('Run cleared', 'You finished every level. Open the shop or start another run.', true, PHASE.LEVEL_UP);
+    setOverlay('Run cleared', 'You finished every level. Open the shop or press Start for another swipe-steered run.', true, PHASE.LEVEL_UP);
     openShop(true);
     syncProfileToCloud(false, 'run cleared');
   }
@@ -748,7 +748,7 @@ function handleKey(event) {
 function handleSwipe(startX, startY, endX, endY) {
   const dx = endX - startX;
   const dy = endY - startY;
-  const threshold = 22;
+  const threshold = 16;
   if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) return;
   if (Math.abs(dx) > Math.abs(dy)) applyDirectionInput(dx > 0 ? 1 : -1, 0);
   else applyDirectionInput(0, dy > 0 ? 1 : -1);
@@ -861,6 +861,14 @@ function wireEvents() {
     event.preventDefault();
   }, { passive: false });
   canvas.addEventListener('pointermove', (event) => {
+    if (touchStart) {
+      const dx = event.clientX - touchStart.x;
+      const dy = event.clientY - touchStart.y;
+      if (Math.abs(dx) >= 16 || Math.abs(dy) >= 16) {
+        handleSwipe(touchStart.x, touchStart.y, event.clientX, event.clientY);
+        touchStart = { x: event.clientX, y: event.clientY };
+      }
+    }
     event.preventDefault();
   }, { passive: false });
   canvas.addEventListener('pointerup', (event) => {
@@ -871,14 +879,6 @@ function wireEvents() {
   canvas.addEventListener('pointercancel', () => { touchStart = null; }, { passive: true });
   canvas.addEventListener('touchstart', (event) => event.preventDefault(), { passive: false });
   canvas.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
-
-  document.querySelectorAll('[data-dir]').forEach((button) => button.addEventListener('click', () => {
-    const dir = button.dataset.dir;
-    if (dir === 'up') applyDirectionInput(0, -1);
-    else if (dir === 'down') applyDirectionInput(0, 1);
-    else if (dir === 'left') applyDirectionInput(-1, 0);
-    else if (dir === 'right') applyDirectionInput(1, 0);
-  }));
 
   playPauseBtn.addEventListener('click', togglePlayPause);
   restartBtn.addEventListener('click', () => {

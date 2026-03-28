@@ -70,29 +70,13 @@
         </div>
       </section>
 
-      <footer class="control-dock">
+      <footer class="control-dock compact-dock">
         <div class="dock-main-actions">
           <button id="playPauseBtn">Start</button>
           <button class="secondary" id="restartBtn">Reset run</button>
           <button class="ghost desktop-only" id="fullscreenBtn">Full screen</button>
         </div>
-
-        <div class="touch-cluster" aria-label="Touch controls">
-          <div class="touch-row touch-row-top">
-            <button class="dir" data-dir="up" aria-label="Up">▲</button>
-          </div>
-          <div class="touch-row touch-row-bottom">
-            <button class="dir" data-dir="left" aria-label="Left">◀</button>
-            <button class="dock-center-badge" type="button" disabled>
-              <span>Swipe or tap to steer</span>
-              <small>Start now picks a valid random direction after the countdown</small>
-            </button>
-            <button class="dir" data-dir="right" aria-label="Right">▶</button>
-          </div>
-          <div class="touch-row touch-row-down">
-            <button class="dir" data-dir="down" aria-label="Down">▼</button>
-          </div>
-        </div>
+        <p class="swipe-hint">Swipe anywhere on the board to steer. Start still does the countdown, then launches in a random valid direction.</p>
       </footer>
     </section>
   </main>
