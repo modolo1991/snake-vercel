@@ -485,6 +485,7 @@ function loop(timestamp) {
 }
 
 function handleKey(event) {
+  if (isTypingTarget(event.target) || isTypingTarget(document.activeElement)) return;
   const key = event.key.toLowerCase();
   if (["arrowup","arrowdown","arrowleft","arrowright","w","a","s","d"," ","f"].includes(key)) event.preventDefault();
   if (key === 'arrowup' || key === 'w') setDirection(0, -1);
@@ -554,6 +555,14 @@ async function syncProfileToCloud(force = false) {
     syncInFlight = false;
     updateUi();
   }
+}
+
+function isTypingTarget(target) {
+  if (!target) return false;
+  const tag = (target.tagName || '').toUpperCase();
+  if (target.isContentEditable) return true;
+  if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(tag)) return true;
+  return !!target.closest?.('form, [role=dialog], .auth-panel, .auth-card');
 }
 
 function wireEvents() {
