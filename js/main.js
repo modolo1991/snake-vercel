@@ -100,6 +100,8 @@ let phase = PHASE.READY;
 let countdownRemaining = 0;
 let countdownUntil = 0;
 let shopFeedbackTimer = 0;
+let pausedPhase = null;
+let pausedCountdownMs = 0;
 
 boot();
 
@@ -220,6 +222,8 @@ function centerSnake() {
   accumulator = 0;
   countdownRemaining = 0;
   countdownUntil = 0;
+  pausedPhase = null;
+  pausedCountdownMs = 0;
 }
 
 function clearAuthInputs() {
@@ -227,27 +231,8 @@ function clearAuthInputs() {
   authPassword.value = '';
 }
 
-function getValidStartDirections() {
-  const head = CENTER_SPAWN[0];
-  const bodyKeys = new Set(CENTER_SPAWN.slice(1).map(keyOf));
-  const options = [
-    { x: 1, y: 0 },
-    { x: 0, y: 1 },
-    { x: 0, y: -1 },
-    { x: -1, y: 0 },
-  ].filter((dir) => {
-    const next = { x: head.x + dir.x, y: head.y + dir.y };
-    if (next.x < 0 || next.y < 0 || next.x >= GRID || next.y >= GRID) return false;
-    if (bodyKeys.has(keyOf(next))) return false;
-    if (obstacles.some((cell) => sameCell(cell, next))) return false;
-    return true;
-  });
-  return options.length ? options : [{ x: 1, y: 0 }];
-}
-
-function randomStartDirection() {
-  const options = getValidStartDirections();
-  return options[Math.floor(Math.random() * options.length)];
+function defaultStartDirection() {
+  return { x: 1, y: 0 };
 }
 
 function resetGameState(autoStart = false, options = {}) {
@@ -263,8 +248,8 @@ function resetGameState(autoStart = false, options = {}) {
   centerSnake();
   food = randomFreeCell();
   setPhase(PHASE.READY);
-  if (autoStart) beginCountdown(randomStartDirection());
-  else setOverlay('Ready', 'Press Start for a short countdown. Then swipe on the board to steer while the snake launches in a random valid direction.', true, PHASE.READY);
+  if (autoStart) beginCountdown(defaultStartDirection());
+  else setOverlay('Ready', 'Press Start for a short countdown. Then swipe on the board to steer while the snake launches to the right.', true, PHASE.READY);
   updateUi();
   draw();
   if (!options.skipSync) syncProfileToCloud(false, options.reason || 'reset');
@@ -284,16 +269,18 @@ function resetBoardForLevel(phaseAfterReset = PHASE.READY) {
   draw();
 }
 
-function beginCountdown(dir) {
+function beginCountdown(dir = defaultStartDirection(), durationMs = 3000) {
   pendingStartDirection = { ...dir };
   direction = { ...dir };
   nextDirection = { ...dir };
   lastHeading = { ...dir };
   accumulator = 0;
-  countdownRemaining = 3;
-  countdownUntil = performance.now() + countdownRemaining * 1000;
+  pausedPhase = null;
+  pausedCountdownMs = 0;
+  countdownRemaining = Math.max(1, Math.ceil(durationMs / 1000));
+  countdownUntil = performance.now() + durationMs;
   setPhase(PHASE.COUNTDOWN);
-  setOverlay('Starting in 3', 'Get ready. Movement begins after the countdown, then you steer by swiping on the board.', true, PHASE.COUNTDOWN);
+  setOverlay(`Starting in ${countdownRemaining}`, 'Get ready. Movement begins after the countdown, then you steer by swiping on the board.', true, PHASE.COUNTDOWN);
   updateUi();
   draw();
 }
@@ -304,6 +291,8 @@ function commitCountdownStart() {
   nextDirection = { ...pendingStartDirection };
   lastHeading = { ...pendingStartDirection };
   pendingStartDirection = null;
+  pausedPhase = null;
+  pausedCountdownMs = 0;
   accumulator = 0;
   setPhase(PHASE.RUNNING);
   setOverlay('', '', false, 'none');
@@ -316,10 +305,16 @@ function startOrResumeGame() {
     return;
   }
   if (phase === PHASE.READY || phase === PHASE.LEVEL_UP) {
-    beginCountdown(randomStartDirection());
+    beginCountdown(defaultStartDirection());
     return;
   }
   if (phase === PHASE.PAUSED) {
+    if (pausedPhase === PHASE.COUNTDOWN && pendingStartDirection && pausedCountdownMs > 0) {
+      beginCountdown(pendingStartDirection, pausedCountdownMs);
+      return;
+    }
+    pausedPhase = null;
+    pausedCountdownMs = 0;
     setPhase(PHASE.RUNNING);
     setOverlay('', '', false, 'none');
     updateUi();
@@ -328,11 +323,17 @@ function startOrResumeGame() {
 
 function pauseGame(showOverlay = true) {
   if (phase !== PHASE.RUNNING && phase !== PHASE.COUNTDOWN) return;
+  pausedPhase = phase;
+  pausedCountdownMs = phase === PHASE.COUNTDOWN ? Math.max(1, countdownUntil - performance.now()) : 0;
   setPhase(PHASE.PAUSED);
-  countdownRemaining = 0;
+  countdownRemaining = pausedPhase === PHASE.COUNTDOWN ? Math.max(1, Math.ceil(pausedCountdownMs / 1000)) : 0;
   countdownUntil = 0;
-  pendingStartDirection = null;
-  if (showOverlay) setOverlay('Paused', 'Tap play to resume, then keep steering with swipes on the board.', true, PHASE.PAUSED);
+  if (showOverlay) {
+    const text = pausedPhase === PHASE.COUNTDOWN
+      ? 'Tap play to resume the countdown, then keep steering with swipes on the board.'
+      : 'Tap play to resume, then keep steering with swipes on the board.';
+    setOverlay('Paused', text, true, PHASE.PAUSED);
+  }
   updateUi();
 }
 
@@ -345,15 +346,18 @@ function applyDirectionInput(x, y) {
   const requested = { x, y };
   if (phase === PHASE.COUNTDOWN) return;
   if (isRoundReadyToStart()) {
-    beginCountdown(randomStartDirection());
+    beginCountdown(defaultStartDirection());
     return;
   }
   const heading = currentHeading();
   if (phase === PHASE.RUNNING && x === -heading.x && y === -heading.y) return;
+  if (phase === PHASE.PAUSED && pausedPhase === PHASE.COUNTDOWN) return;
   nextDirection = requested;
   lastHeading = requested;
   if (phase === PHASE.PAUSED) {
     direction = requested;
+    pausedPhase = null;
+    pausedCountdownMs = 0;
     setPhase(PHASE.RUNNING);
     setOverlay('', '', false, 'none');
     updateUi();
@@ -486,17 +490,16 @@ function dedupeCells(cells) {
 }
 
 function levelUp() {
+  closeShop();
   if (levelIndex < levelDefs.length - 1) {
     levelIndex += 1;
     levelFood = 0;
     resetBoardForLevel(PHASE.LEVEL_UP);
-    openShop(true);
-    setOverlay(`Level ${levelIndex + 1}: ${activeLevel().name}`, 'Board reset. Shop if you want, then press Start and steer with swipes when ready.', true, PHASE.LEVEL_UP);
+    setOverlay(`Level ${levelIndex + 1}: ${activeLevel().name}`, 'Board reset. Choose Next level or Open shop, then steer with swipes when ready.', true, PHASE.LEVEL_UP);
     syncProfileToCloud(false, `level ${levelIndex + 1}`);
   } else {
     resetBoardForLevel(PHASE.LEVEL_UP);
-    setOverlay('Run cleared', 'You finished every level. Open the shop or press Start for another swipe-steered run.', true, PHASE.LEVEL_UP);
-    openShop(true);
+    setOverlay('Run cleared', 'You finished every level. Choose Next level or Open shop for another swipe-steered run.', true, PHASE.LEVEL_UP);
     syncProfileToCloud(false, 'run cleared');
   }
   updateUi();
@@ -623,7 +626,7 @@ function updateUi() {
   statePill.textContent = `State: ${state}`;
 
   playPauseBtn.textContent = phase === PHASE.DEAD ? 'Start again' : (phase === PHASE.RUNNING || phase === PHASE.COUNTDOWN ? 'Pause' : phase === PHASE.PAUSED ? 'Resume' : 'Start');
-  shopNote.textContent = phase === PHASE.RUNNING ? 'You can look now, but changing things between rounds is easier.' : 'Coins, prices, and what you can afford are shown here clearly.';
+  shopNote.textContent = phase === PHASE.RUNNING ? 'You can look now, but changing things between rounds is easier.' : 'Coins appear more often now, and prices are a bit friendlier between rounds.';
 
   if (currentUser) {
     accountStatus.textContent = `Signed in as ${currentUser.email}`;
@@ -899,7 +902,7 @@ function wireEvents() {
 
   messagePrimaryBtn.addEventListener('click', () => {
     closeShop();
-    beginCountdown(randomStartDirection());
+    beginCountdown(defaultStartDirection());
   });
   messageSecondaryBtn.addEventListener('click', () => openShop(true));
 
