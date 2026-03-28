@@ -85,8 +85,8 @@
           <div class="touch-row touch-row-bottom">
             <button class="dir" data-dir="left" aria-label="Left">◀</button>
             <button class="dock-center-badge" type="button" disabled>
-              <span>Tap to steer</span>
-              <small>No auto start drift</small>
+              <span>Tap or swipe</span>
+              <small>Same start path, 3 second countdown</small>
             </button>
             <button class="dir" data-dir="right" aria-label="Right">▶</button>
           </div>
@@ -106,6 +106,8 @@
       <div>
         <h3>Shop & loadout</h3>
         <p class="sheet-note" id="shopNote">Best used between levels.</p>
+        <p class="sheet-balance" id="shopBalance">0 coins available</p>
+        <p class="sheet-feedback hidden" id="shopFeedback"></p>
       </div>
       <button class="ghost mini" id="closeShopBtn" type="button">Done</button>
     </div>
@@ -124,15 +126,11 @@
     </div>
 
     <div class="account-panel" id="accountPanel">
-      <div class="account-actions" id="accountActionsSignedOut">
-        <button id="signInPrimaryBtn">Sign in</button>
-        <button class="secondary" id="signUpPrimaryBtn">Create account</button>
-      </div>
-
       <div class="account-actions hidden" id="accountActionsSignedIn">
-        <button class="secondary mini" id="syncNowBtn">Sync now</button>
         <button class="ghost mini" id="signOutBtn">Sign out</button>
       </div>
+
+      <div class="account-actions" id="accountActionsSignedOut"></div>
 
       <div class="auth-panel" id="authPanel">
         <div class="auth-grid">
@@ -152,11 +150,11 @@
         <div class="auth-secondary">
           <button class="ghost mini" id="magicLinkBtn">Email magic link instead</button>
         </div>
-        <p class="auth-note">Local play works without login. Sign in only if you want synced saves across devices.</p>
+        <p class="auth-note">Play without logging in if you want. Sign in only when you want this save on more than one device.</p>
       </div>
 
       <div class="account-tools">
-        <div class="help left">Need a clean slate? This removes coins, skins, upgrades, and best score.</div>
+        <div class="help left">Start fresh clears coins, skins, upgrades, and best score.</div>
         <button class="ghost" id="resetProgressBtn">Start fresh</button>
       </div>
     </div>

@@ -38,27 +38,37 @@ const closeShopBtn = document.getElementById('closeShopBtn');
 const closeAccountBtn = document.getElementById('closeAccountBtn');
 const shopNote = document.getElementById('shopNote');
 const shopItems = document.getElementById('shopItems');
+const shopBalance = document.getElementById('shopBalance');
+const shopFeedback = document.getElementById('shopFeedback');
 const accountStatus = document.getElementById('accountStatus');
 const syncStatus = document.getElementById('syncStatus');
-const accountPanel = document.getElementById('accountPanel');
 
-const signInPrimaryBtn = document.getElementById('signInPrimaryBtn');
-const signUpPrimaryBtn = document.getElementById('signUpPrimaryBtn');
 const authEmail = document.getElementById('authEmail');
 const authPassword = document.getElementById('authPassword');
 const signInBtn = document.getElementById('signInBtn');
 const signUpBtn = document.getElementById('signUpBtn');
 const magicLinkBtn = document.getElementById('magicLinkBtn');
 const signOutBtn = document.getElementById('signOutBtn');
-const syncNowBtn = document.getElementById('syncNowBtn');
 const accountActionsSignedOut = document.getElementById('accountActionsSignedOut');
 const accountActionsSignedIn = document.getElementById('accountActionsSignedIn');
+
+const boardFrame = document.querySelector('.board-frame');
+const boardTopline = document.querySelector('.board-topline');
+const boardShell = document.querySelector('.board-shell');
 
 const GRID = 20;
 const SIZE = canvas.width;
 const CELL = SIZE / GRID;
 const config = getAppConfig();
 const CENTER_SPAWN = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+const PHASE = {
+  READY: 'ready',
+  COUNTDOWN: 'countdown',
+  RUNNING: 'running',
+  PAUSED: 'paused',
+  LEVEL_UP: 'level-up',
+  DEAD: 'dead',
+};
 
 let profile = loadLocalProfile();
 let currentUser = null;
@@ -69,6 +79,7 @@ let syncInFlight = false;
 let snake = [];
 let direction = { x: 0, y: 0 };
 let nextDirection = { x: 0, y: 0 };
+let pendingStartDirection = null;
 let lastHeading = { x: 1, y: 0 };
 let food = null;
 let coin = null;
@@ -78,25 +89,27 @@ let score = 0;
 let bankedRunCoins = 0;
 let levelIndex = 0;
 let levelFood = 0;
-let running = false;
-let started = false;
-let gameOver = false;
 let usedShield = false;
 let lastTime = 0;
 let accumulator = 0;
 let touchStart = null;
 let tunnelCooldown = 0;
-let overlayMode = 'ready';
+let overlayMode = PHASE.READY;
 let toastTimer = 0;
 let activeSheet = null;
+let phase = PHASE.READY;
+let countdownRemaining = 0;
+let countdownUntil = 0;
+let shopFeedbackTimer = 0;
 
 boot();
 
 async function boot() {
   renderShop();
-  resetGame(false);
+  resetGameState(false, { reason: 'initial load', skipSync: true });
   wireEvents();
   updateViewportHeight();
+  updateBoardSize();
   requestAnimationFrame(loop);
   updateAuthButtons();
   updateUi();
@@ -107,20 +120,20 @@ async function boot() {
       const { user } = await getSession();
       currentUser = user;
       if (currentUser) await syncProfileFromCloud();
-      else syncMessage = 'Sign in if you want this progress synced across devices.';
+      else syncMessage = 'Play here now, or sign in to keep your save across devices.';
       onAuthStateChange(async (user) => {
         currentUser = user;
         if (currentUser) await syncProfileFromCloud();
         else {
           saveMode = 'local-only';
-          syncMessage = 'Signed out. Progress stays on this device until you sign back in.';
+          syncMessage = 'Signed out. This device keeps the current save locally.';
           updateAuthButtons();
           updateUi();
         }
       });
     } catch (error) {
       saveMode = 'local-only';
-      syncMessage = `Supabase unavailable: ${error.message}`;
+      syncMessage = `Cloud save unavailable: ${error.message}`;
     }
   }
   updateAuthButtons();
@@ -140,15 +153,21 @@ function sameCell(a, b) { return a && b && a.x === b.x && a.y === b.y; }
 function isStationary() { return direction.x === 0 && direction.y === 0; }
 function currentHeading() { return isStationary() ? lastHeading : direction; }
 function isSheetOpen(id) { return activeSheet === id; }
+function isRoundReadyToStart() { return phase === PHASE.READY || phase === PHASE.DEAD || phase === PHASE.LEVEL_UP; }
 
-function setOverlay(title, text, visible, mode = 'ready') {
+function setPhase(nextPhase) {
+  phase = nextPhase;
+  overlayMode = nextPhase;
+}
+
+function setOverlay(title, text, visible, mode = PHASE.READY) {
   overlayMode = mode;
   messageTitle.textContent = title;
   messageText.textContent = text;
-  const showActions = mode === 'level-up';
+  const showActions = mode === PHASE.LEVEL_UP;
   messageActions.classList.toggle('hidden', !showActions);
   if (showActions) {
-    messagePrimaryBtn.textContent = 'Start next level';
+    messagePrimaryBtn.textContent = 'Next level';
     messageSecondaryBtn.textContent = 'Open shop';
   }
   overlay.classList.toggle('hidden', !visible);
@@ -159,6 +178,14 @@ function showToast(text, duration = 1800) {
   toast.classList.remove('hidden');
   clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => toast.classList.add('hidden'), duration);
+}
+
+function showShopFeedback(text, tone = 'neutral', duration = 2200) {
+  shopFeedback.textContent = text;
+  shopFeedback.dataset.tone = tone;
+  shopFeedback.classList.remove('hidden');
+  clearTimeout(shopFeedbackTimer);
+  shopFeedbackTimer = window.setTimeout(() => shopFeedback.classList.add('hidden'), duration);
 }
 
 function openSheet(id) {
@@ -183,18 +210,18 @@ function centerSnake() {
   snake = CENTER_SPAWN.map((cell) => ({ ...cell }));
   direction = { x: 0, y: 0 };
   nextDirection = { x: 0, y: 0 };
+  pendingStartDirection = null;
   lastHeading = { x: 1, y: 0 };
-  started = false;
-  running = false;
   accumulator = 0;
+  countdownRemaining = 0;
+  countdownUntil = 0;
 }
 
-function resetGame(autoStart = false) {
+function resetGameState(autoStart = false, options = {}) {
   score = 0;
   bankedRunCoins = 0;
   levelIndex = 0;
   levelFood = 0;
-  gameOver = false;
   usedShield = false;
   lastTime = 0;
   tunnelCooldown = 0;
@@ -202,10 +229,12 @@ function resetGame(autoStart = false) {
   applyLevel();
   centerSnake();
   food = randomFreeCell();
+  setPhase(PHASE.READY);
+  if (autoStart) beginCountdown({ x: 1, y: 0 });
+  else setOverlay('Ready', 'Pick a direction to start. Buttons and swipes do the same thing.', true, PHASE.READY);
   updateUi();
   draw();
-  if (autoStart) startLevelFromInput({ x: 1, y: 0 });
-  else setOverlay('Ready?', 'Tap an arrow to start. Swipe on the board also works if you want it.', true, 'ready');
+  if (!options.skipSync) syncProfileToCloud(false, options.reason || 'reset');
 }
 
 function applyLevel() {
@@ -213,65 +242,89 @@ function applyLevel() {
   tunnels = createTunnels(activeLevel().tunnels);
 }
 
-function resetBoardForLevel() {
+function resetBoardForLevel(phaseAfterReset = PHASE.READY) {
   applyLevel();
   centerSnake();
   food = randomFreeCell();
   coin = null;
+  setPhase(phaseAfterReset);
   draw();
 }
 
-function startGame() {
-  if (gameOver) {
-    resetGame(false);
-    return;
-  }
-  if (isStationary()) {
-    setOverlay('Choose a direction', 'Tap an arrow to begin this level. Swipe still works on the board.', true, overlayMode);
-    return;
-  }
-  started = true;
-  running = true;
-  setOverlay('', '', false, 'none');
-  updateUi();
-}
-
-function startLevelFromInput(dir) {
+function beginCountdown(dir) {
+  pendingStartDirection = { ...dir };
   direction = { ...dir };
   nextDirection = { ...dir };
   lastHeading = { ...dir };
-  started = true;
-  running = true;
+  accumulator = 0;
+  countdownRemaining = 3;
+  countdownUntil = performance.now() + countdownRemaining * 1000;
+  setPhase(PHASE.COUNTDOWN);
+  setOverlay('Starting in 3', 'Get ready. Movement begins after the countdown.', true, PHASE.COUNTDOWN);
+  updateUi();
+  draw();
+}
+
+function commitCountdownStart() {
+  if (!pendingStartDirection) return;
+  direction = { ...pendingStartDirection };
+  nextDirection = { ...pendingStartDirection };
+  lastHeading = { ...pendingStartDirection };
+  pendingStartDirection = null;
+  accumulator = 0;
+  setPhase(PHASE.RUNNING);
   setOverlay('', '', false, 'none');
   updateUi();
 }
 
+function startOrResumeGame() {
+  if (phase === PHASE.DEAD) {
+    resetGameState(false, { reason: 'new run' });
+    return;
+  }
+  if (phase === PHASE.READY || phase === PHASE.LEVEL_UP) {
+    setOverlay('Choose a direction', 'Tap or swipe to pick the first move.', true, overlayMode);
+    return;
+  }
+  if (phase === PHASE.PAUSED) {
+    setPhase(PHASE.RUNNING);
+    setOverlay('', '', false, 'none');
+    updateUi();
+  }
+}
+
 function pauseGame(showOverlay = true) {
-  if ((!started && !gameOver) || gameOver) return;
-  running = false;
-  if (showOverlay) setOverlay('Paused', 'Tap play or use the arrows to resume.', true, 'pause');
+  if (phase !== PHASE.RUNNING && phase !== PHASE.COUNTDOWN) return;
+  setPhase(PHASE.PAUSED);
+  countdownRemaining = 0;
+  countdownUntil = 0;
+  pendingStartDirection = null;
+  if (showOverlay) setOverlay('Paused', 'Tap play or any direction to keep going.', true, PHASE.PAUSED);
   updateUi();
 }
 
 function togglePlayPause() {
-  if (gameOver) {
-    resetGame(false);
-    return;
-  }
-  if (running) pauseGame();
-  else startGame();
+  if (phase === PHASE.RUNNING || phase === PHASE.COUNTDOWN) pauseGame();
+  else startOrResumeGame();
 }
 
-function setDirection(x, y) {
-  const moving = !isStationary();
+function applyDirectionInput(x, y) {
+  const requested = { x, y };
+  if (phase === PHASE.COUNTDOWN) {
+    beginCountdown(requested);
+    return;
+  }
+  if (isRoundReadyToStart()) {
+    beginCountdown(requested);
+    return;
+  }
   const heading = currentHeading();
-  if (moving && x === -heading.x && y === -heading.y) return;
-  nextDirection = { x, y };
-  lastHeading = { x, y };
-  if (!started) startLevelFromInput({ x, y });
-  else if (!running) {
-    direction = { x, y };
-    running = true;
+  if (phase === PHASE.RUNNING && x === -heading.x && y === -heading.y) return;
+  nextDirection = requested;
+  lastHeading = requested;
+  if (phase === PHASE.PAUSED) {
+    direction = requested;
+    setPhase(PHASE.RUNNING);
     setOverlay('', '', false, 'none');
     updateUi();
   }
@@ -283,17 +336,19 @@ async function mutateProfile(mutator, options = {}) {
   renderShop();
   updateUi();
   draw();
-  if (!options.skipRemote) await syncProfileToCloud();
+  if (!options.skipRemote) await syncProfileToCloud(false, options.reason || 'save');
 }
 
 async function buyOrEquip(id) {
   const item = catalog.find((entry) => entry.id === id);
   if (!item) return;
   let result = 'updated';
+  let shortfall = 0;
   await mutateProfile((draft) => {
     if (!draft.owned.includes(id)) {
       if (draft.coins < item.cost) {
         result = 'insufficient';
+        shortfall = item.cost - draft.coins;
         return draft;
       }
       draft.coins -= item.cost;
@@ -311,32 +366,48 @@ async function buyOrEquip(id) {
       result = result === 'purchased' ? 'purchased-activated' : 'activated';
     }
     return draft;
-  });
-  if (result === 'insufficient') showToast(`Not enough coins for ${item.name}.`);
-  else if (result === 'equipped') showToast(`${item.name} equipped.`);
-  else if (result === 'activated') showToast(`${item.name} enabled.`);
-  else if (result === 'deactivated') showToast(`${item.name} disabled.`);
-  else showToast(`${item.name} ready.`);
+  }, { reason: `shop: ${item.name}` });
+
+  if (result === 'insufficient') {
+    showToast(`Need ${shortfall} more coin${shortfall === 1 ? '' : 's'} for ${item.name}.`);
+    showShopFeedback(`${item.name} costs ${item.cost} coins. You have ${profile.coins}.`, 'error');
+  } else if (result === 'equipped') {
+    showToast(`${item.name} equipped.`);
+    showShopFeedback(`${item.name} is now equipped.`, 'success');
+  } else if (result === 'activated') {
+    showToast(`${item.name} enabled.`);
+    showShopFeedback(`${item.name} is active for this run.`, 'success');
+  } else if (result === 'deactivated') {
+    showToast(`${item.name} disabled.`);
+    showShopFeedback(`${item.name} is turned off.`, 'neutral');
+  } else {
+    showToast(`${item.name} ready.`);
+    showShopFeedback(`${item.name} unlocked and ready to use.`, 'success');
+  }
 }
 
 function renderShop() {
   shopItems.innerHTML = '';
+  shopBalance.textContent = `${profile.coins} coin${profile.coins === 1 ? '' : 's'} available`;
   for (const item of catalog) {
     const owned = hasItem(item.id);
     const equipped = item.type === 'skin' ? profile.equippedSkin === item.id : profile.activePowers.includes(item.id);
+    const affordable = owned || profile.coins >= item.cost;
     const card = document.createElement('div');
-    card.className = 'item';
+    card.className = `item ${affordable ? '' : 'item-locked'}`.trim();
     const accent = item.colors ? `<span class="swatch" style="background:${item.colors.head}"></span>` : '';
-    const label = !owned ? `Buy ${item.cost}🪙` : equipped ? (item.type === 'skin' ? 'Equipped' : 'Active') : (item.type === 'skin' ? 'Equip' : 'Activate');
+    const price = owned ? '' : `<div class="item-price ${affordable ? 'can-afford' : 'cant-afford'}">${item.cost} coins</div>`;
+    const label = !owned ? `Buy` : equipped ? (item.type === 'skin' ? 'Equipped' : 'Active') : (item.type === 'skin' ? 'Equip' : 'Activate');
     card.innerHTML = `
       <div class="item-head">
         <div>
           <div class="item-name">${item.name}</div>
           <div class="item-desc">${item.desc}</div>
+          ${price}
         </div>
         ${accent}
       </div>
-      <button class="mini ${owned && equipped ? 'secondary' : owned ? 'ghost' : ''}" ${owned && equipped && item.type === 'skin' ? 'disabled' : ''}>${label}</button>
+      <button class="mini ${owned && equipped ? 'secondary' : owned ? 'ghost' : affordable ? '' : 'secondary'}" ${owned && equipped && item.type === 'skin' ? 'disabled' : ''}>${label}</button>
     `;
     card.querySelector('button').addEventListener('click', () => buyOrEquip(item.id));
     shopItems.appendChild(card);
@@ -388,14 +459,15 @@ function levelUp() {
   if (levelIndex < levelDefs.length - 1) {
     levelIndex += 1;
     levelFood = 0;
-    resetBoardForLevel();
+    resetBoardForLevel(PHASE.LEVEL_UP);
     openShop(true);
-    setOverlay(`Level ${levelIndex + 1}: ${activeLevel().name}`, 'Fresh board. Pick a loadout if you want, then choose a direction to start.', true, 'level-up');
+    setOverlay(`Level ${levelIndex + 1}: ${activeLevel().name}`, 'Board reset. Shop if you want, then pick a direction when ready.', true, PHASE.LEVEL_UP);
+    syncProfileToCloud(false, `level ${levelIndex + 1}`);
   } else {
-    running = false;
-    started = false;
-    setOverlay('Final level cleared', 'Nice. Open the shop or start another run when ready.', true, 'level-up');
+    resetBoardForLevel(PHASE.LEVEL_UP);
+    setOverlay('Run cleared', 'You finished every level. Open the shop or start another run.', true, PHASE.LEVEL_UP);
     openShop(true);
+    syncProfileToCloud(false, 'run cleared');
   }
   updateUi();
   draw();
@@ -403,7 +475,7 @@ function levelUp() {
 
 async function awardCoin(amount) {
   bankedRunCoins += amount;
-  await mutateProfile((draft) => ({ ...draft, coins: draft.coins + amount, best: Math.max(draft.best, score) }));
+  await mutateProfile((draft) => ({ ...draft, coins: draft.coins + amount, best: Math.max(draft.best, score) }), { reason: `coins +${amount}` });
   showToast(`+${amount} coin${amount === 1 ? '' : 's'}`);
 }
 
@@ -419,7 +491,7 @@ function consumeShield() {
   usedShield = true;
   snake.shift();
   direction = { ...nextDirection };
-  showToast('Shield used. One save only.');
+  showToast('Shield used.');
   return true;
 }
 
@@ -445,7 +517,7 @@ async function step() {
     score += 1;
     levelFood += 1;
     grew = true;
-    if (score > profile.best) mutateProfile((draft) => ({ ...draft, best: score }), { skipRemote: false });
+    if (score > profile.best) mutateProfile((draft) => ({ ...draft, best: score }), { reason: 'new best' });
     food = randomFreeCell(coin ? [coin] : []);
     maybeSpawnCoin();
     if (levelFood >= activeLevel().target) {
@@ -494,9 +566,10 @@ function isBlocked(cell, extra = []) {
 }
 
 function endGame() {
-  running = false;
-  gameOver = true;
-  setOverlay('Game over', `Score ${score}, coins banked +${bankedRunCoins}. Tap play for another run.`, true, 'game-over');
+  const summary = `Score ${score}. Coins banked this run: +${bankedRunCoins}. Pick a direction to start again.`;
+  resetBoardForLevel(PHASE.DEAD);
+  setOverlay('Game over', summary, true, PHASE.DEAD);
+  syncProfileToCloud(false, 'death');
   updateUi();
   draw();
 }
@@ -509,27 +582,29 @@ function updateUi() {
   speedPill.textContent = `Speed: ${getSpeed().toFixed(1)} tiles/sec`;
   goalPill.textContent = `Next level: ${Math.max(activeLevel().target - levelFood, 0)} food`;
   skinPill.textContent = `Skin: ${currentSkin().name}`;
-  saveModePill.textContent = `Save: ${currentUser ? 'cloud sync on' : saveMode.replace('-', ' ')}`;
+  saveModePill.textContent = `Save: ${currentUser ? 'auto cloud sync' : saveMode.replace('-', ' ')}`;
 
-  let state = 'waiting for first move';
-  if (gameOver) state = 'game over';
-  else if (running) state = activeLevel().name;
-  else if (started) state = 'paused';
+  let state = 'ready';
+  if (phase === PHASE.COUNTDOWN) state = `starting in ${countdownRemaining}`;
+  else if (phase === PHASE.RUNNING) state = activeLevel().name;
+  else if (phase === PHASE.PAUSED) state = 'paused';
+  else if (phase === PHASE.LEVEL_UP) state = 'level cleared';
+  else if (phase === PHASE.DEAD) state = 'game over';
   statePill.textContent = `State: ${state}`;
 
-  playPauseBtn.textContent = gameOver ? 'Play again' : (running ? 'Pause' : 'Play');
-  pauseBtn.textContent = running ? 'Pause' : 'Resume';
-  shopNote.textContent = running ? 'You can browse now, but it feels best between levels.' : 'Good time to change skins or enable upgrades before the next run.';
+  playPauseBtn.textContent = phase === PHASE.DEAD ? 'New run' : (phase === PHASE.RUNNING || phase === PHASE.COUNTDOWN ? 'Pause' : 'Play');
+  pauseBtn.textContent = phase === PHASE.RUNNING || phase === PHASE.COUNTDOWN ? 'Pause' : 'Resume';
+  shopNote.textContent = phase === PHASE.RUNNING ? 'You can look now, but changing things between rounds is easier.' : 'Coins, prices, and what you can afford are shown here clearly.';
 
   if (currentUser) {
     accountStatus.textContent = `Signed in as ${currentUser.email}`;
-    syncStatus.textContent = syncMessage || 'Progress saves here and syncs with your account.';
+    syncStatus.textContent = syncMessage || 'Progress saves automatically and syncs with this account.';
   } else if (hasSupabaseConfig(config)) {
-    accountStatus.textContent = 'Not signed in yet';
-    syncStatus.textContent = syncMessage || 'Play locally now, or sign in to keep progress across devices.';
+    accountStatus.textContent = 'Not signed in';
+    syncStatus.textContent = syncMessage || 'Play locally now, or sign in to sync this save across devices.';
   } else {
-    accountStatus.textContent = 'Running in local-only mode';
-    syncStatus.textContent = syncMessage || 'Add Supabase config later if you want accounts and cloud sync.';
+    accountStatus.textContent = 'Local save only';
+    syncStatus.textContent = syncMessage || 'Add Supabase config later if you want login and cloud sync.';
   }
 
   magicLinkBtn.disabled = !config.enableMagicLink || !hasSupabaseConfig(config);
@@ -599,16 +674,29 @@ function drawLevelBadge() {
 }
 function draw() { ctx.clearRect(0, 0, SIZE, SIZE); drawBoard(); drawObstacles(); drawTunnels(); drawFood(); drawCoin(); drawSnake(); drawLevelBadge(); }
 
+function updateCountdown(now) {
+  if (phase !== PHASE.COUNTDOWN) return;
+  const msLeft = Math.max(0, countdownUntil - now);
+  const nextCount = Math.max(0, Math.ceil(msLeft / 1000));
+  if (nextCount !== countdownRemaining) {
+    countdownRemaining = nextCount;
+    if (countdownRemaining > 0) setOverlay(`Starting in ${countdownRemaining}`, 'Get ready. Movement begins after the countdown.', true, PHASE.COUNTDOWN);
+    updateUi();
+  }
+  if (msLeft <= 0) commitCountdownStart();
+}
+
 function loop(timestamp) {
   if (!lastTime) lastTime = timestamp;
   const delta = (timestamp - lastTime) / 1000;
   lastTime = timestamp;
-  if (running) {
+  updateCountdown(timestamp);
+  if (phase === PHASE.RUNNING) {
     accumulator += delta;
     const interval = 1 / getSpeed();
     while (accumulator >= interval) {
       accumulator -= interval;
-      if (!running) break;
+      if (phase !== PHASE.RUNNING) break;
       step();
     }
   }
@@ -619,10 +707,10 @@ function handleKey(event) {
   if (isTypingTarget(event.target) || isTypingTarget(document.activeElement)) return;
   const key = event.key.toLowerCase();
   if (["arrowup","arrowdown","arrowleft","arrowright","w","a","s","d"," ","f","escape"].includes(key)) event.preventDefault();
-  if (key === 'arrowup' || key === 'w') setDirection(0, -1);
-  else if (key === 'arrowdown' || key === 's') setDirection(0, 1);
-  else if (key === 'arrowleft' || key === 'a') setDirection(-1, 0);
-  else if (key === 'arrowright' || key === 'd') setDirection(1, 0);
+  if (key === 'arrowup' || key === 'w') applyDirectionInput(0, -1);
+  else if (key === 'arrowdown' || key === 's') applyDirectionInput(0, 1);
+  else if (key === 'arrowleft' || key === 'a') applyDirectionInput(-1, 0);
+  else if (key === 'arrowright' || key === 'd') applyDirectionInput(1, 0);
   else if (key === ' ') togglePlayPause();
   else if (key === 'f') goFullscreen();
   else if (key === 'escape' && activeSheet) closeSheets();
@@ -633,14 +721,27 @@ function handleSwipe(startX, startY, endX, endY) {
   const dy = endY - startY;
   const threshold = 22;
   if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) return;
-  if (Math.abs(dx) > Math.abs(dy)) setDirection(dx > 0 ? 1 : -1, 0);
-  else setDirection(0, dy > 0 ? 1 : -1);
+  if (Math.abs(dx) > Math.abs(dy)) applyDirectionInput(dx > 0 ? 1 : -1, 0);
+  else applyDirectionInput(0, dy > 0 ? 1 : -1);
 }
 
 function updateViewportHeight() {
   const viewportHeight = window.visualViewport?.height || window.innerHeight;
   document.documentElement.style.setProperty('--vh', `${viewportHeight * 0.01}px`);
 }
+
+function updateBoardSize() {
+  const frameRect = boardFrame.getBoundingClientRect();
+  const toplineRect = boardTopline.getBoundingClientRect();
+  const frameStyle = getComputedStyle(boardFrame);
+  const gap = parseFloat(frameStyle.rowGap || frameStyle.gap || '0') || 0;
+  const availableWidth = Math.max(0, frameRect.width);
+  const availableHeight = Math.max(0, frameRect.height - toplineRect.height - gap);
+  const size = Math.max(0, Math.floor(Math.min(availableWidth, availableHeight)));
+  boardShell.style.width = `${size}px`;
+  boardShell.style.height = `${size}px`;
+}
+
 async function goFullscreen() { const el = document.documentElement; if (!document.fullscreenElement && el.requestFullscreen) try { await el.requestFullscreen({ navigationUI: 'hide' }); } catch {} }
 function updateAuthButtons() {
   accountActionsSignedOut.classList.toggle('hidden', Boolean(currentUser));
@@ -654,17 +755,17 @@ async function syncProfileFromCloud() {
   try {
     const remote = await fetchRemoteProfile(currentUser.id);
     if (!remote) {
-      await syncProfileToCloud(true);
+      await syncProfileToCloud(true, 'first cloud save');
       saveMode = 'cloud-sync';
-      syncMessage = 'Created your cloud save from the current local profile.';
+      syncMessage = 'Cloud save created from this device.';
     } else {
       const localTime = new Date(profile.updatedAt || 0).getTime();
       const remoteTime = new Date(remote.updatedAt || 0).getTime();
       profile = remoteTime >= localTime ? remote : profile;
       profile = saveLocalProfile(profile);
-      if (localTime > remoteTime) await syncProfileToCloud(true);
+      if (localTime > remoteTime) await syncProfileToCloud(true, 'login merge');
       saveMode = 'cloud-sync';
-      syncMessage = 'Cloud progress loaded.';
+      syncMessage = 'Cloud save loaded.';
     }
   } catch (error) {
     saveMode = 'local-only';
@@ -674,7 +775,7 @@ async function syncProfileFromCloud() {
   updateUi();
   draw();
 }
-async function syncProfileToCloud(force = false) {
+async function syncProfileToCloud(force = false, reason = 'save') {
   if (!currentUser || syncInFlight) return;
   if (!force && !hasSupabaseConfig(config)) return;
   syncInFlight = true;
@@ -682,7 +783,7 @@ async function syncProfileToCloud(force = false) {
     const remote = await saveRemoteProfile(currentUser.id, profile);
     if (remote) profile = saveLocalProfile(remote);
     saveMode = 'cloud-sync';
-    syncMessage = 'Progress synced.';
+    syncMessage = `Saved automatically after ${reason}.`;
   } catch (error) {
     saveMode = 'local-only';
     syncMessage = `Cloud save failed: ${error.message}`;
@@ -701,7 +802,7 @@ function isTypingTarget(target) {
 }
 
 function openShop(force = false) {
-  if (running && !force) pauseGame(false);
+  if (phase === PHASE.RUNNING && !force) pauseGame(false);
   openSheet('shop');
   updateUi();
 }
@@ -744,14 +845,14 @@ function wireEvents() {
 
   document.querySelectorAll('[data-dir]').forEach((button) => button.addEventListener('click', () => {
     const dir = button.dataset.dir;
-    if (dir === 'up') setDirection(0, -1);
-    else if (dir === 'down') setDirection(0, 1);
-    else if (dir === 'left') setDirection(-1, 0);
-    else if (dir === 'right') setDirection(1, 0);
+    if (dir === 'up') applyDirectionInput(0, -1);
+    else if (dir === 'down') applyDirectionInput(0, 1);
+    else if (dir === 'left') applyDirectionInput(-1, 0);
+    else if (dir === 'right') applyDirectionInput(1, 0);
   }));
 
   playPauseBtn.addEventListener('click', togglePlayPause);
-  restartBtn.addEventListener('click', () => resetGame(false));
+  restartBtn.addEventListener('click', () => resetGameState(false, { reason: 'restart' }));
   pauseBtn.addEventListener('click', togglePlayPause);
   fullscreenBtn?.addEventListener('click', goFullscreen);
 
@@ -763,23 +864,21 @@ function wireEvents() {
 
   messagePrimaryBtn.addEventListener('click', () => {
     closeShop();
-    setOverlay('Choose a direction', 'Tap an arrow to start this level. Swipe still works on the board.', true, 'ready');
+    setOverlay('Choose a direction', 'Tap or swipe to pick the first move.', true, PHASE.READY);
   });
   messageSecondaryBtn.addEventListener('click', () => openShop(true));
 
   resetProgressBtn.addEventListener('click', async () => {
-    const ok = window.confirm(currentUser ? 'Reset your progress everywhere? This removes coins, skins, upgrades, and best score.' : 'Reset local progress on this device? This removes coins, skins, upgrades, and best score.');
+    const ok = window.confirm(currentUser ? 'Reset your progress everywhere? This removes coins, skins, upgrades, and best score.' : 'Reset progress on this device? This removes coins, skins, upgrades, and best score.');
     if (!ok) return;
     profile = resetLocalProfile();
-    if (currentUser) await syncProfileToCloud(true);
-    resetGame(false);
-    syncMessage = currentUser ? 'Progress reset locally and in the cloud.' : 'Local progress reset.';
+    if (currentUser) await syncProfileToCloud(true, 'progress reset');
+    resetGameState(false, { reason: 'progress reset', skipSync: true });
+    syncMessage = currentUser ? 'Progress reset here and in the cloud.' : 'Progress reset on this device.';
     closeSheets();
     updateUi();
   });
 
-  signInPrimaryBtn.addEventListener('click', () => authEmail.focus());
-  signUpPrimaryBtn.addEventListener('click', () => authEmail.focus());
   signInBtn.addEventListener('click', async () => {
     try {
       const { email, password } = getAuthInput();
@@ -795,7 +894,7 @@ function wireEvents() {
     try {
       const { email, password } = getAuthInput();
       await signUp(email, password);
-      syncMessage = 'Account created. Check email if confirmation is enabled.';
+      syncMessage = 'Account created. Check your email if confirmation is on.';
       showToast('Account created.');
       updateUi();
     } catch (error) {
@@ -824,11 +923,11 @@ function wireEvents() {
       updateUi();
     }
   });
-  syncNowBtn.addEventListener('click', async () => { await syncProfileToCloud(true); showToast('Sync finished.'); });
 
   window.addEventListener('keydown', handleKey, { passive: false });
-  window.addEventListener('resize', updateViewportHeight);
-  window.addEventListener('orientationchange', updateViewportHeight);
-  window.visualViewport?.addEventListener('resize', updateViewportHeight);
-  document.addEventListener('visibilitychange', () => { if (document.hidden && running) pauseGame(false); });
+  window.addEventListener('resize', () => { updateViewportHeight(); updateBoardSize(); });
+  window.addEventListener('orientationchange', () => { updateViewportHeight(); updateBoardSize(); });
+  window.visualViewport?.addEventListener('resize', () => { updateViewportHeight(); updateBoardSize(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && (phase === PHASE.RUNNING || phase === PHASE.COUNTDOWN)) pauseGame(false); });
+  new ResizeObserver(() => updateBoardSize()).observe(document.body);
 }
