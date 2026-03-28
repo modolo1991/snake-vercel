@@ -24,39 +24,49 @@
       </div>
 
       <section class="account-shell">
-        <div class="account-summary">
+        <button class="account-summary account-toggle" id="accountToggleBtn" type="button" aria-expanded="false">
           <div>
-            <div class="section-title">Account</div>
+            <div class="section-title">Save progress</div>
             <div class="account-status" id="accountStatus">Running in local-only mode.</div>
             <div class="account-subtle" id="syncStatus">Add Supabase config to enable login and cross-device save sync.</div>
           </div>
-          <div class="account-actions" id="accountActionsSignedOut">
-            <button class="secondary mini" id="showAuthBtn">Log in / Sign up</button>
+          <div class="account-summary-side">
+            <span class="save-chip" id="saveChip">Local only</span>
+            <span class="account-chevron">▾</span>
           </div>
-          <div class="account-actions hidden" id="accountActionsSignedIn">
-            <button class="ghost mini" id="syncNowBtn">Sync now</button>
-            <button class="secondary mini" id="signOutBtn">Sign out</button>
-          </div>
-        </div>
+        </button>
 
-        <div class="auth-panel hidden" id="authPanel">
-          <div class="auth-grid">
-            <label>
-              <span>Email</span>
-              <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com" />
-            </label>
-            <label>
-              <span>Password</span>
-              <input id="authPassword" type="password" autocomplete="current-password" placeholder="At least 8 characters" />
-            </label>
+        <div class="account-panel hidden" id="accountPanel">
+          <div class="account-actions" id="accountActionsSignedOut">
+            <button id="signInPrimaryBtn">Sign in</button>
+            <button class="secondary" id="signUpPrimaryBtn">Create account</button>
           </div>
-          <div class="auth-actions">
-            <button id="signInBtn">Sign in</button>
-            <button class="secondary" id="signUpBtn">Create account</button>
-            <button class="ghost" id="magicLinkBtn">Email magic link</button>
-            <button class="ghost" id="closeAuthBtn">Close</button>
+
+          <div class="account-actions hidden" id="accountActionsSignedIn">
+            <button class="secondary mini" id="syncNowBtn">Sync now</button>
+            <button class="ghost mini" id="signOutBtn">Sign out</button>
           </div>
-          <p class="auth-note">If Supabase auth is enabled, progress syncs to your account. Without config, the game still works locally on this device.</p>
+
+          <div class="auth-panel" id="authPanel">
+            <div class="auth-grid">
+              <label>
+                <span>Email</span>
+                <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com" />
+              </label>
+              <label>
+                <span>Password</span>
+                <input id="authPassword" type="password" autocomplete="current-password" placeholder="At least 8 characters" />
+              </label>
+            </div>
+            <div class="auth-actions">
+              <button id="signInBtn">Sign in</button>
+              <button class="secondary" id="signUpBtn">Create account</button>
+            </div>
+            <div class="auth-secondary">
+              <button class="ghost mini" id="magicLinkBtn">Email magic link instead</button>
+            </div>
+            <p class="auth-note">If Supabase auth is enabled, progress syncs to your account. Without config, the game still works locally on this device.</p>
+          </div>
         </div>
       </section>
 
@@ -67,8 +77,13 @@
             <div class="message">
               <h2 id="messageTitle">Ready?</h2>
               <p id="messageText">Tap play, swipe on the board, or press a direction to start.</p>
+              <div class="message-actions hidden" id="messageActions">
+                <button id="messagePrimaryBtn">Continue</button>
+                <button class="secondary" id="messageSecondaryBtn">Open shop</button>
+              </div>
             </div>
           </div>
+          <div class="toast hidden" id="toast"></div>
         </section>
       </div>
 
@@ -83,6 +98,7 @@
         <div class="actions">
           <button id="playPauseBtn">Play</button>
           <button class="secondary" id="restartBtn">Restart</button>
+          <button class="ghost" id="shopToggleBtn">Shop</button>
           <button class="ghost" id="resetProgressBtn">Start fresh</button>
           <button class="ghost hide-mobile-ui" id="fullscreenBtn">Full screen</button>
         </div>
@@ -98,14 +114,15 @@
           </div>
         </div>
 
-        <section class="shop">
-          <div class="row" style="justify-content: space-between; align-items: flex-start;">
+        <section class="shop hidden" id="shopPanel">
+          <div class="row shop-head">
             <div>
               <h3>Shop & loadout</h3>
-              <p class="shop-note">Owned skins, coins, and upgrades save locally now and can sync per-user once Supabase is configured.</p>
+              <p class="shop-note" id="shopNote">Best used between levels. Skins and upgrades save locally now and can sync per-user once Supabase is configured.</p>
             </div>
             <div class="quick-shop">
               <button class="ghost mini" id="pauseBtn">Pause</button>
+              <button class="ghost mini" id="closeShopBtn">Done</button>
             </div>
           </div>
           <div class="items" id="shopItems"></div>
@@ -113,7 +130,7 @@
       </div>
 
       <div class="help">
-        Swipe on the board or use the big arrows. Apples grow score, coins buy upgrades, purple holes are tunnel pairs, and each level adds speed or hazards.
+        Swipe on the board or use the big arrows. Apples grow score, coins buy skins and power-ups, purple holes are tunnel pairs, and each level adds speed or hazards.
       </div>
     </section>
   </main>

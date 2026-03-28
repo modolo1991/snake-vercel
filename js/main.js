@@ -1,4 +1,4 @@
-import { catalog, COIN_LIFE_STEPS, COIN_SPAWN_EVERY, defaultProfile, levelDefs } from './catalog.js';
+import { catalog, COIN_LIFE_STEPS, COIN_SPAWN_EVERY, levelDefs } from './catalog.js';
 import { getAppConfig, hasSupabaseConfig } from './config.js';
 import { loadLocalProfile, resetLocalProfile, saveLocalProfile, sanitizeProfile } from './storage.js';
 import { fetchRemoteProfile, getSession, getSupabaseClient, onAuthStateChange, saveRemoteProfile, sendMagicLink, signIn, signOut, signUp } from './supabase.js';
@@ -8,6 +8,10 @@ const ctx = canvas.getContext('2d');
 const overlay = document.getElementById('overlay');
 const messageTitle = document.getElementById('messageTitle');
 const messageText = document.getElementById('messageText');
+const messageActions = document.getElementById('messageActions');
+const messagePrimaryBtn = document.getElementById('messagePrimaryBtn');
+const messageSecondaryBtn = document.getElementById('messageSecondaryBtn');
+const toast = document.getElementById('toast');
 const scoreEl = document.getElementById('score');
 const bestEl = document.getElementById('best');
 const coinsEl = document.getElementById('coins');
@@ -17,17 +21,23 @@ const statePill = document.getElementById('statePill');
 const goalPill = document.getElementById('goalPill');
 const skinPill = document.getElementById('skinPill');
 const saveModePill = document.getElementById('saveModePill');
+const saveChip = document.getElementById('saveChip');
 const playPauseBtn = document.getElementById('playPauseBtn');
 const restartBtn = document.getElementById('restartBtn');
 const resetProgressBtn = document.getElementById('resetProgressBtn');
 const pauseBtn = document.getElementById('pauseBtn');
 const fullscreenBtn = document.getElementById('fullscreenBtn');
+const shopToggleBtn = document.getElementById('shopToggleBtn');
+const closeShopBtn = document.getElementById('closeShopBtn');
+const shopPanel = document.getElementById('shopPanel');
+const shopNote = document.getElementById('shopNote');
 const shopItems = document.getElementById('shopItems');
 const accountStatus = document.getElementById('accountStatus');
 const syncStatus = document.getElementById('syncStatus');
-const showAuthBtn = document.getElementById('showAuthBtn');
-const closeAuthBtn = document.getElementById('closeAuthBtn');
-const authPanel = document.getElementById('authPanel');
+const accountToggleBtn = document.getElementById('accountToggleBtn');
+const accountPanel = document.getElementById('accountPanel');
+const signInPrimaryBtn = document.getElementById('signInPrimaryBtn');
+const signUpPrimaryBtn = document.getElementById('signUpPrimaryBtn');
 const authEmail = document.getElementById('authEmail');
 const authPassword = document.getElementById('authPassword');
 const signInBtn = document.getElementById('signInBtn');
@@ -42,6 +52,7 @@ const GRID = 20;
 const SIZE = canvas.width;
 const CELL = SIZE / GRID;
 const config = getAppConfig();
+const CENTER_SPAWN = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
 
 let profile = loadLocalProfile();
 let currentUser = null;
@@ -49,8 +60,9 @@ let saveMode = hasSupabaseConfig(config) ? 'supabase-ready' : 'local-only';
 let syncMessage = '';
 let syncInFlight = false;
 let snake = [];
-let direction = { x: 1, y: 0 };
-let nextDirection = { x: 1, y: 0 };
+let direction = { x: 0, y: 0 };
+let nextDirection = { x: 0, y: 0 };
+let lastHeading = { x: 1, y: 0 };
 let food = null;
 let coin = null;
 let obstacles = [];
@@ -67,6 +79,8 @@ let lastTime = 0;
 let accumulator = 0;
 let touchStart = null;
 let tunnelCooldown = 0;
+let overlayMode = 'ready';
+let toastTimer = 0;
 
 boot();
 
@@ -85,13 +99,13 @@ async function boot() {
       const { user } = await getSession();
       currentUser = user;
       if (currentUser) await syncProfileFromCloud();
-      else syncMessage = 'Supabase connected. Log in to sync progress across devices.';
+      else syncMessage = 'Sign in if you want this progress synced across devices.';
       onAuthStateChange(async (user) => {
         currentUser = user;
         if (currentUser) await syncProfileFromCloud();
         else {
-          saveMode = hasSupabaseConfig(config) ? 'local-only' : 'local-only';
-          syncMessage = 'Signed out. Progress is staying on this device until you log in again.';
+          saveMode = 'local-only';
+          syncMessage = 'Signed out. Progress stays on this device until you sign back in.';
           updateAuthButtons();
           updateUi();
         }
@@ -115,35 +129,56 @@ function currentSkin() { return catalog.find((item) => item.id === profile.equip
 function getSpeed() { return activeLevel().speed * (hasPower('power-slow') ? 0.88 : 1); }
 function keyOf(cell) { return `${cell.x},${cell.y}`; }
 function sameCell(a, b) { return a && b && a.x === b.x && a.y === b.y; }
+function isStationary() { return direction.x === 0 && direction.y === 0; }
+function currentHeading() { return isStationary() ? lastHeading : direction; }
 
-function setOverlay(title, text, visible) {
+function setOverlay(title, text, visible, mode = 'ready') {
+  overlayMode = mode;
   messageTitle.textContent = title;
   messageText.textContent = text;
+  const showActions = mode === 'level-up';
+  messageActions.classList.toggle('hidden', !showActions);
+  if (showActions) {
+    messagePrimaryBtn.textContent = 'Start next level';
+    messageSecondaryBtn.textContent = 'Open shop';
+  }
   overlay.classList.toggle('hidden', !visible);
 }
 
+function showToast(text, duration = 1800) {
+  toast.textContent = text;
+  toast.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => toast.classList.add('hidden'), duration);
+}
+
+function centerSnake() {
+  snake = CENTER_SPAWN.map((cell) => ({ ...cell }));
+  direction = { x: 0, y: 0 };
+  nextDirection = { x: 0, y: 0 };
+  lastHeading = { x: 1, y: 0 };
+  started = false;
+  running = false;
+  accumulator = 0;
+}
+
 function resetGame(autoStart = false) {
-  snake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
-  direction = { x: 1, y: 0 };
-  nextDirection = { x: 1, y: 0 };
   score = 0;
   bankedRunCoins = 0;
   levelIndex = 0;
   levelFood = 0;
-  running = false;
-  started = false;
   gameOver = false;
   usedShield = false;
   lastTime = 0;
-  accumulator = 0;
   tunnelCooldown = 0;
-  applyLevel();
-  food = randomFreeCell();
   coin = null;
+  applyLevel();
+  centerSnake();
+  food = randomFreeCell();
   updateUi();
   draw();
-  if (autoStart) startGame();
-  else setOverlay('Ready?', 'Collect apples to level up. Coins buy skins and power-ups.', true);
+  if (autoStart) startLevelFromInput({ x: 1, y: 0 });
+  else setOverlay('Ready?', 'Swipe or tap a direction to start. The snake waits for your first move.', true, 'ready');
 }
 
 function applyLevel() {
@@ -151,31 +186,68 @@ function applyLevel() {
   tunnels = createTunnels(activeLevel().tunnels);
 }
 
+function resetBoardForLevel() {
+  applyLevel();
+  centerSnake();
+  food = randomFreeCell();
+  coin = null;
+  draw();
+}
+
 function startGame() {
-  if (gameOver) resetGame(false);
+  if (gameOver) {
+    resetGame(false);
+    return;
+  }
+  if (isStationary()) {
+    setOverlay('Choose a direction', 'Swipe or tap an arrow to begin this level.', true, overlayMode);
+    return;
+  }
   started = true;
   running = true;
-  setOverlay('', '', false);
+  setOverlay('', '', false, 'none');
   updateUi();
 }
 
-function pauseGame() {
-  if (!started || gameOver) return;
+function startLevelFromInput(dir) {
+  direction = { ...dir };
+  nextDirection = { ...dir };
+  lastHeading = { ...dir };
+  started = true;
+  running = true;
+  setOverlay('', '', false, 'none');
+  updateUi();
+}
+
+function pauseGame(showOverlay = true) {
+  if ((!started && !gameOver) || gameOver) return;
   running = false;
-  setOverlay('Paused', 'Tap play, swipe again, or press space to resume.', true);
+  if (showOverlay) setOverlay('Paused', 'Tap play or choose a direction to resume.', true, 'pause');
   updateUi();
 }
 
 function togglePlayPause() {
-  if (!started || gameOver) startGame();
-  else if (running) pauseGame();
+  if (gameOver) {
+    resetGame(false);
+    return;
+  }
+  if (running) pauseGame();
   else startGame();
 }
 
 function setDirection(x, y) {
-  if (x === -direction.x && y === -direction.y) return;
+  const moving = !isStationary();
+  const heading = currentHeading();
+  if (moving && x === -heading.x && y === -heading.y) return;
   nextDirection = { x, y };
-  if (!started || gameOver) startGame();
+  lastHeading = { x, y };
+  if (!started) startLevelFromInput({ x, y });
+  else if (!running) {
+    direction = { x, y };
+    running = true;
+    setOverlay('', '', false, 'none');
+    updateUi();
+  }
 }
 
 async function mutateProfile(mutator, options = {}) {
@@ -190,21 +262,34 @@ async function mutateProfile(mutator, options = {}) {
 async function buyOrEquip(id) {
   const item = catalog.find((entry) => entry.id === id);
   if (!item) return;
+  let result = 'updated';
   await mutateProfile((draft) => {
     if (!draft.owned.includes(id)) {
-      if (draft.coins < item.cost) return draft;
+      if (draft.coins < item.cost) {
+        result = 'insufficient';
+        return draft;
+      }
       draft.coins -= item.cost;
       draft.owned.push(id);
+      result = 'purchased';
     }
     if (item.type === 'skin') {
       draft.equippedSkin = id;
+      result = result === 'purchased' ? 'purchased-equipped' : 'equipped';
     } else if (draft.activePowers.includes(id)) {
       draft.activePowers = draft.activePowers.filter((entry) => entry !== id);
+      result = 'deactivated';
     } else {
       draft.activePowers.push(id);
+      result = result === 'purchased' ? 'purchased-activated' : 'activated';
     }
     return draft;
   });
+  if (result === 'insufficient') showToast(`Not enough coins for ${item.name}.`);
+  else if (result === 'equipped') showToast(`${item.name} equipped.`);
+  else if (result === 'activated') showToast(`${item.name} enabled.`);
+  else if (result === 'deactivated') showToast(`${item.name} disabled.`);
+  else showToast(`${item.name} ready.`);
 }
 
 function renderShop() {
@@ -215,7 +300,7 @@ function renderShop() {
     const card = document.createElement('div');
     card.className = 'item';
     const accent = item.colors ? `<span class="swatch" style="background:${item.colors.head}"></span>` : '';
-    let label = !owned ? `Buy ${item.cost}🪙` : equipped ? (item.type === 'skin' ? 'Equipped' : 'Active') : (item.type === 'skin' ? 'Equip' : 'Activate');
+    const label = !owned ? `Buy ${item.cost}🪙` : equipped ? (item.type === 'skin' ? 'Equipped' : 'Active') : (item.type === 'skin' ? 'Equip' : 'Activate');
     card.innerHTML = `
       <div class="item-head">
         <div>
@@ -276,11 +361,14 @@ function levelUp() {
   if (levelIndex < levelDefs.length - 1) {
     levelIndex += 1;
     levelFood = 0;
-    applyLevel();
-    food = randomFreeCell(coin ? [coin] : []);
-    if (coin) Object.assign(coin, randomFreeCell([food]), { life: coin.life });
-    setOverlay(`Level ${levelIndex + 1}: ${activeLevel().name}`, 'New speed and hazards. Tap play or swipe to continue.', true);
+    resetBoardForLevel();
+    openShop(true);
+    setOverlay(`Level ${levelIndex + 1}: ${activeLevel().name}`, 'Fresh board. Pick a loadout if you want, then choose a direction to start.', true, 'level-up');
+  } else {
     running = false;
+    started = false;
+    setOverlay('Final level cleared', 'Nice. Open the shop or start another run when ready.', true, 'level-up');
+    openShop(true);
   }
   updateUi();
   draw();
@@ -289,6 +377,7 @@ function levelUp() {
 async function awardCoin(amount) {
   bankedRunCoins += amount;
   await mutateProfile((draft) => ({ ...draft, coins: draft.coins + amount, best: Math.max(draft.best, score) }));
+  showToast(`+${amount} coin${amount === 1 ? '' : 's'}`);
 }
 
 function maybeSpawnCoin() {
@@ -303,15 +392,13 @@ function consumeShield() {
   usedShield = true;
   snake.shift();
   direction = { ...nextDirection };
-  setOverlay('Shield used', 'You got one free save this run.', true);
-  running = false;
-  updateUi();
-  draw();
+  showToast('Shield used. One save only.');
   return true;
 }
 
 async function step() {
-  direction = nextDirection;
+  direction = { ...nextDirection };
+  lastHeading = { ...direction };
   if (tunnelCooldown > 0) tunnelCooldown -= 1;
   const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
   const hitWall = head.x < 0 || head.y < 0 || head.x >= GRID || head.y >= GRID;
@@ -334,7 +421,10 @@ async function step() {
     if (score > profile.best) mutateProfile((draft) => ({ ...draft, best: score }), { skipRemote: false });
     food = randomFreeCell(coin ? [coin] : []);
     maybeSpawnCoin();
-    if (levelFood >= activeLevel().target) levelUp();
+    if (levelFood >= activeLevel().target) {
+      levelUp();
+      return;
+    }
   }
   if (coin && sameCell(snake[0], coin)) {
     const value = activeLevel().coinValue;
@@ -379,7 +469,7 @@ function isBlocked(cell, extra = []) {
 function endGame() {
   running = false;
   gameOver = true;
-  setOverlay('Game over', `Score ${score}, coins banked +${bankedRunCoins}. Tap play for another run.`, true);
+  setOverlay('Game over', `Score ${score}, coins banked +${bankedRunCoins}. Tap play for another run.`, true, 'game-over');
   updateUi();
   draw();
 }
@@ -393,15 +483,28 @@ function updateUi() {
   goalPill.textContent = `Next level: ${Math.max(activeLevel().target - levelFood, 0)} food`;
   skinPill.textContent = `Skin: ${currentSkin().name}`;
   saveModePill.textContent = `Save: ${currentUser ? 'cloud sync on' : saveMode.replace('-', ' ')}`;
-  let state = 'waiting';
+  saveChip.textContent = currentUser ? 'Cloud sync on' : (hasSupabaseConfig(config) ? 'Local until login' : 'Local only');
+  let state = 'waiting for first move';
   if (gameOver) state = 'game over';
   else if (running) state = activeLevel().name;
   else if (started) state = 'paused';
   statePill.textContent = `State: ${state}`;
   playPauseBtn.textContent = gameOver ? 'Play again' : (running ? 'Pause' : 'Play');
   pauseBtn.textContent = running ? 'Pause' : 'Play';
-  accountStatus.textContent = currentUser ? `Signed in as ${currentUser.email}` : (hasSupabaseConfig(config) ? 'Supabase connected. Sign in to sync progress.' : 'Running in local-only mode.');
-  syncStatus.textContent = syncMessage || (currentUser ? 'Progress saves on this device and syncs to your account.' : 'Add Supabase config to enable login and cross-device save sync.');
+  shopToggleBtn.textContent = shopPanel.classList.contains('hidden') ? 'Shop' : 'Hide shop';
+  shopNote.textContent = running ? 'You can browse now, but it feels best between levels.' : 'Good time to change skins or enable upgrades before the next run.';
+
+  if (currentUser) {
+    accountStatus.textContent = `Signed in as ${currentUser.email}`;
+    syncStatus.textContent = syncMessage || 'Progress saves here and syncs with your account.';
+  } else if (hasSupabaseConfig(config)) {
+    accountStatus.textContent = 'Not signed in yet';
+    syncStatus.textContent = syncMessage || 'Play locally now, or sign in to keep progress across devices.';
+  } else {
+    accountStatus.textContent = 'Running in local-only mode';
+    syncStatus.textContent = syncMessage || 'Add Supabase config later if you want accounts and cloud sync.';
+  }
+
   magicLinkBtn.disabled = !config.enableMagicLink || !hasSupabaseConfig(config);
   renderShop();
 }
@@ -446,14 +549,15 @@ function drawTunnels() {
 }
 function drawSnake() {
   const skin = currentSkin().colors;
+  const heading = currentHeading();
   snake.forEach((seg, index) => {
     const x = seg.x * CELL + 2;
     const y = seg.y * CELL + 2;
     const size = CELL - 4;
     drawRoundedRect(x, y, size, size, 7, index === 0 ? skin.head : skin.body);
     if (index === 0) {
-      const eyeOffsetX = direction.x === 0 ? CELL * 0.15 : direction.x * CELL * 0.12;
-      const eyeOffsetY = direction.y === 0 ? CELL * 0.15 : direction.y * CELL * 0.12;
+      const eyeOffsetX = heading.x === 0 ? CELL * 0.15 : heading.x * CELL * 0.12;
+      const eyeOffsetY = heading.y === 0 ? CELL * 0.15 : heading.y * CELL * 0.12;
       const baseX = seg.x * CELL + CELL / 2;
       const baseY = seg.y * CELL + CELL / 2;
       ctx.fillStyle = skin.eye; ctx.beginPath(); ctx.arc(baseX - 5 + eyeOffsetX, baseY - 5 + eyeOffsetY, 2.3, 0, Math.PI * 2); ctx.arc(baseX + 5 + eyeOffsetX, baseY - 5 + eyeOffsetY, 2.3, 0, Math.PI * 2); ctx.fill();
@@ -565,6 +669,28 @@ function isTypingTarget(target) {
   return !!target.closest?.('form, [role=dialog], .auth-panel, .auth-card');
 }
 
+function openShop(force = false) {
+  if (running && !force) pauseGame(false);
+  shopPanel.classList.remove('hidden');
+  updateUi();
+}
+
+function closeShop() {
+  shopPanel.classList.add('hidden');
+  updateUi();
+}
+
+function toggleShop() {
+  if (shopPanel.classList.contains('hidden')) openShop();
+  else closeShop();
+}
+
+function toggleAccountPanel(force) {
+  const open = typeof force === 'boolean' ? force : accountPanel.classList.contains('hidden');
+  accountPanel.classList.toggle('hidden', !open);
+  accountToggleBtn.setAttribute('aria-expanded', String(open));
+}
+
 function wireEvents() {
   canvas.addEventListener('pointerdown', (event) => { touchStart = { x: event.clientX, y: event.clientY }; }, { passive: true });
   canvas.addEventListener('pointerup', (event) => { if (touchStart) handleSwipe(touchStart.x, touchStart.y, event.clientX, event.clientY); touchStart = null; }, { passive: true });
@@ -574,9 +700,16 @@ function wireEvents() {
     if (dir === 'up') setDirection(0, -1); else if (dir === 'down') setDirection(0, 1); else if (dir === 'left') setDirection(-1, 0); else if (dir === 'right') setDirection(1, 0);
   }));
   playPauseBtn.addEventListener('click', togglePlayPause);
-  restartBtn.addEventListener('click', () => resetGame(true));
+  restartBtn.addEventListener('click', () => resetGame(false));
   pauseBtn.addEventListener('click', togglePlayPause);
   fullscreenBtn.addEventListener('click', goFullscreen);
+  shopToggleBtn.addEventListener('click', toggleShop);
+  closeShopBtn.addEventListener('click', closeShop);
+  messagePrimaryBtn.addEventListener('click', () => {
+    closeShop();
+    setOverlay('Choose a direction', 'Swipe or tap an arrow to start this level.', true, 'ready');
+  });
+  messageSecondaryBtn.addEventListener('click', () => openShop(true));
   resetProgressBtn.addEventListener('click', async () => {
     const ok = window.confirm(currentUser ? 'Reset your progress everywhere? This removes coins, skins, upgrades, and best score.' : 'Reset local progress on this device? This removes coins, skins, upgrades, and best score.');
     if (!ok) return;
@@ -584,16 +717,18 @@ function wireEvents() {
     if (currentUser) await syncProfileToCloud(true);
     resetGame(false);
     syncMessage = currentUser ? 'Progress reset locally and in the cloud.' : 'Local progress reset.';
+    closeShop();
     updateUi();
   });
-  showAuthBtn.addEventListener('click', () => authPanel.classList.remove('hidden'));
-  closeAuthBtn.addEventListener('click', () => authPanel.classList.add('hidden'));
+  accountToggleBtn.addEventListener('click', () => toggleAccountPanel());
+  signInPrimaryBtn.addEventListener('click', () => { toggleAccountPanel(true); authEmail.focus(); });
+  signUpPrimaryBtn.addEventListener('click', () => { toggleAccountPanel(true); authEmail.focus(); });
   signInBtn.addEventListener('click', async () => {
     try {
       const { email, password } = getAuthInput();
       await signIn(email, password);
-      authPanel.classList.add('hidden');
       syncMessage = 'Signed in.';
+      showToast('Signed in.');
     } catch (error) {
       syncMessage = error.message;
       updateUi();
@@ -604,6 +739,7 @@ function wireEvents() {
       const { email, password } = getAuthInput();
       await signUp(email, password);
       syncMessage = 'Account created. Check email if confirmation is enabled.';
+      showToast('Account created.');
       updateUi();
     } catch (error) {
       syncMessage = error.message;
@@ -615,6 +751,7 @@ function wireEvents() {
       const { email } = getAuthInput();
       await sendMagicLink(email);
       syncMessage = 'Magic link sent.';
+      showToast('Magic link sent.');
       updateUi();
     } catch (error) {
       syncMessage = error.message;
@@ -622,11 +759,11 @@ function wireEvents() {
     }
   });
   signOutBtn.addEventListener('click', async () => {
-    try { await signOut(); } catch (error) { syncMessage = error.message; updateUi(); }
+    try { await signOut(); showToast('Signed out.'); } catch (error) { syncMessage = error.message; updateUi(); }
   });
-  syncNowBtn.addEventListener('click', () => syncProfileToCloud(true));
+  syncNowBtn.addEventListener('click', async () => { await syncProfileToCloud(true); showToast('Sync finished.'); });
   window.addEventListener('keydown', handleKey, { passive: false });
   window.addEventListener('resize', updateViewportHeight);
   window.addEventListener('orientationchange', updateViewportHeight);
-  document.addEventListener('visibilitychange', () => { if (document.hidden && running) pauseGame(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && running) pauseGame(false); });
 }
