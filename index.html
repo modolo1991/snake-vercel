@@ -94,7 +94,16 @@
       </div>
       <button class="ghost mini" id="closeShopBtn" type="button">Done</button>
     </div>
-    <div class="items" id="shopItems"></div>
+    <div class="shop-tabs" id="shopTabs" role="tablist" aria-label="Shop sections">
+      <button class="shop-tab active" id="shopTabSkins" type="button" role="tab" aria-selected="true" aria-controls="shopPanelSkins">Skins</button>
+      <button class="shop-tab" id="shopTabPowers" type="button" role="tab" aria-selected="false" aria-controls="shopPanelPowers">Power-ups</button>
+    </div>
+    <div class="shop-panel" id="shopPanelSkins" role="tabpanel" aria-labelledby="shopTabSkins">
+      <div class="items" id="shopItemsSkins"></div>
+    </div>
+    <div class="shop-panel hidden" id="shopPanelPowers" role="tabpanel" aria-labelledby="shopTabPowers">
+      <div class="items" id="shopItemsPowers"></div>
+    </div>
   </section>
 
   <section class="sheet hidden" id="accountSheet" aria-hidden="true">

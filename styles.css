@@ -213,7 +213,43 @@ canvas {
 .overlay.compact .message {
   margin-top: 8px;
 }
+.overlay[data-mode="countdown"] {
+  background: radial-gradient(circle at center, rgba(15, 23, 42, 0.1), rgba(2, 6, 23, 0.48));
+}
+.overlay[data-mode="countdown"] .message {
+  width: min(100%, 360px);
+  margin-top: 18px;
+  padding: 18px 18px 16px;
+  border-width: 2px;
+  border-color: rgba(255,255,255,0.28);
+  background: rgba(7, 14, 26, 0.94);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.1), 0 0 44px rgba(34, 197, 94, 0.35), 0 18px 48px rgba(0,0,0,0.42);
+  animation: countdown-strobe 1s steps(1, end) infinite;
+}
+.overlay[data-mode="countdown"] .message h2 {
+  font-size: clamp(2.3rem, 11vw, 4rem);
+  line-height: 0.95;
+  margin-bottom: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.overlay[data-mode="countdown"] .message p {
+  font-size: 0.92rem;
+  color: rgba(255,255,255,0.9);
+}
 .message h2 { margin: 0 0 6px; font-size: 1.05rem; }
+@keyframes countdown-strobe {
+  0%, 49.999% {
+    background: rgba(127, 29, 29, 0.95);
+    border-color: rgba(254, 202, 202, 0.88);
+    box-shadow: 0 0 0 2px rgba(254, 202, 202, 0.2), 0 0 54px rgba(239, 68, 68, 0.62), 0 18px 52px rgba(0,0,0,0.48);
+  }
+  50%, 100% {
+    background: rgba(20, 83, 45, 0.95);
+    border-color: rgba(220, 252, 231, 0.88);
+    box-shadow: 0 0 0 2px rgba(220, 252, 231, 0.2), 0 0 54px rgba(34, 197, 94, 0.62), 0 18px 52px rgba(0,0,0,0.48);
+  }
+}
 .message p, .sheet-note, .sheet-subtle, .auth-note, .help, .item-desc { margin: 0; color: var(--muted); line-height: 1.35; }
 .message-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
 .toast {
@@ -342,6 +378,26 @@ button:disabled { opacity: 0.58; cursor: default; transform: none; }
   color: #dcfce7;
   background: rgba(34, 197, 94, 0.14);
   border-color: rgba(34, 197, 94, 0.26);
+}
+.shop-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.shop-tab {
+  min-height: 42px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: none;
+}
+.shop-tab.active {
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.28), rgba(37, 99, 235, 0.4));
+  border-color: rgba(96, 165, 250, 0.45);
+}
+.shop-panel {
+  display: block;
 }
 .items {
   display: grid;

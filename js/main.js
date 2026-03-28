@@ -36,7 +36,12 @@ const accountSheet = document.getElementById('accountSheet');
 const closeShopBtn = document.getElementById('closeShopBtn');
 const closeAccountBtn = document.getElementById('closeAccountBtn');
 const shopNote = document.getElementById('shopNote');
-const shopItems = document.getElementById('shopItems');
+const shopItemsSkins = document.getElementById('shopItemsSkins');
+const shopItemsPowers = document.getElementById('shopItemsPowers');
+const shopTabSkins = document.getElementById('shopTabSkins');
+const shopTabPowers = document.getElementById('shopTabPowers');
+const shopPanelSkins = document.getElementById('shopPanelSkins');
+const shopPanelPowers = document.getElementById('shopPanelPowers');
 const shopBalance = document.getElementById('shopBalance');
 const shopFeedback = document.getElementById('shopFeedback');
 const accountStatus = document.getElementById('accountStatus');
@@ -99,6 +104,7 @@ let activeSheet = null;
 let phase = PHASE.READY;
 let countdownRemaining = 0;
 let countdownUntil = 0;
+let activeShopTab = 'skins';
 let shopFeedbackTimer = 0;
 let pausedPhase = null;
 let pausedCountdownMs = 0;
@@ -169,6 +175,7 @@ function setPhase(nextPhase) {
 
 function setOverlay(title, text, visible, mode = PHASE.READY) {
   overlayMode = mode;
+  overlay.dataset.mode = mode;
   messageTitle.textContent = title;
   messageText.textContent = text;
   const showActions = mode === PHASE.LEVEL_UP;
@@ -280,7 +287,7 @@ function beginCountdown(dir = defaultStartDirection(), durationMs = 3000) {
   countdownRemaining = Math.max(1, Math.ceil(durationMs / 1000));
   countdownUntil = performance.now() + durationMs;
   setPhase(PHASE.COUNTDOWN);
-  setOverlay(`Starting in ${countdownRemaining}`, 'Get ready. Movement begins after the countdown, then you steer by swiping on the board.', true, PHASE.COUNTDOWN);
+  setOverlay(String(countdownRemaining), 'GET READY — red/green strobe means launch is coming. Movement begins after the countdown.', true, PHASE.COUNTDOWN);
   updateUi();
   draw();
 }
@@ -345,10 +352,7 @@ function togglePlayPause() {
 function applyDirectionInput(x, y) {
   const requested = { x, y };
   if (phase === PHASE.COUNTDOWN) return;
-  if (isRoundReadyToStart()) {
-    beginCountdown(defaultStartDirection());
-    return;
-  }
+  if (isRoundReadyToStart()) return;
   const heading = currentHeading();
   if (phase === PHASE.RUNNING && x === -heading.x && y === -heading.y) return;
   if (phase === PHASE.PAUSED && pausedPhase === PHASE.COUNTDOWN) return;
@@ -420,8 +424,20 @@ async function buyOrEquip(id) {
   }
 }
 
+function setShopTab(tab) {
+  activeShopTab = tab === 'powers' ? 'powers' : 'skins';
+  const showingSkins = activeShopTab === 'skins';
+  shopTabSkins.classList.toggle('active', showingSkins);
+  shopTabPowers.classList.toggle('active', !showingSkins);
+  shopTabSkins.setAttribute('aria-selected', String(showingSkins));
+  shopTabPowers.setAttribute('aria-selected', String(!showingSkins));
+  shopPanelSkins.classList.toggle('hidden', !showingSkins);
+  shopPanelPowers.classList.toggle('hidden', showingSkins);
+}
+
 function renderShop() {
-  shopItems.innerHTML = '';
+  shopItemsSkins.innerHTML = '';
+  shopItemsPowers.innerHTML = '';
   shopBalance.textContent = `${profile.coins} coin${profile.coins === 1 ? '' : 's'} available`;
   for (const item of catalog) {
     const owned = hasItem(item.id);
@@ -429,8 +445,8 @@ function renderShop() {
     const affordable = owned || profile.coins >= item.cost;
     const card = document.createElement('div');
     card.className = `item ${affordable ? '' : 'item-locked'}`.trim();
-    const accent = item.colors ? `<span class="swatch" style="background:${item.colors.head}"></span>` : '';
-    const price = owned ? '' : `<div class="item-price ${affordable ? 'can-afford' : 'cant-afford'}">${item.cost} coins</div>`;
+    const accent = item.colors ? `<span class="swatch" style="background:${item.colors.head}"></span>` : '<span class="swatch" style="background:linear-gradient(135deg,#38bdf8,#8b5cf6)"></span>';
+    const price = owned ? '<div class="item-price can-afford">Owned</div>' : `<div class="item-price ${affordable ? 'can-afford' : 'cant-afford'}">${item.cost} coins</div>`;
     const label = !owned ? `Buy` : equipped ? (item.type === 'skin' ? 'Equipped' : 'Active') : (item.type === 'skin' ? 'Equip' : 'Activate');
     card.innerHTML = `
       <div class="item-head">
@@ -444,8 +460,9 @@ function renderShop() {
       <button class="mini ${owned && equipped ? 'secondary' : owned ? 'ghost' : affordable ? '' : 'secondary'}" ${owned && equipped && item.type === 'skin' ? 'disabled' : ''}>${label}</button>
     `;
     card.querySelector('button').addEventListener('click', () => buyOrEquip(item.id));
-    shopItems.appendChild(card);
+    (item.type === 'skin' ? shopItemsSkins : shopItemsPowers).appendChild(card);
   }
+  setShopTab(activeShopTab);
 }
 
 function randomFreeCell(extraBlocked = []) {
@@ -712,7 +729,7 @@ function updateCountdown(now) {
   const nextCount = Math.max(0, Math.ceil(msLeft / 1000));
   if (nextCount !== countdownRemaining) {
     countdownRemaining = nextCount;
-    if (countdownRemaining > 0) setOverlay(`Starting in ${countdownRemaining}`, 'Get ready. Movement begins after the countdown.', true, PHASE.COUNTDOWN);
+    if (countdownRemaining > 0) setOverlay(String(countdownRemaining), 'GET READY — red/green strobe means launch is coming. Movement begins after the countdown.', true, PHASE.COUNTDOWN);
     updateUi();
   }
   if (msLeft <= 0) commitCountdownStart();
@@ -884,6 +901,8 @@ function wireEvents() {
   canvas.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
 
   playPauseBtn.addEventListener('click', togglePlayPause);
+  shopTabSkins.addEventListener('click', () => setShopTab('skins'));
+  shopTabPowers.addEventListener('click', () => setShopTab('powers'));
   restartBtn.addEventListener('click', () => {
     const needsConfirm = phase !== PHASE.READY || score > 0 || levelIndex > 0;
     if (needsConfirm) {
