@@ -1,6 +1,6 @@
-import { catalog, COIN_LIFE_STEPS, COIN_SPAWN_EVERY, levelDefs } from './catalog.js';
+import { catalog, COIN_LIFE_STEPS, COIN_SPAWN_EVERY, defaultProfile, levelDefs } from './catalog.js';
 import { getAppConfig, hasSupabaseConfig } from './config.js';
-import { loadLocalProfile, resetLocalProfile, saveLocalProfile, sanitizeProfile } from './storage.js';
+import { resetLocalProfile, saveLocalProfile, sanitizeProfile } from './storage.js';
 import { fetchRemoteProfile, getSession, getSupabaseClient, onAuthStateChange, saveRemoteProfile, sendMagicLink, signIn, signOut, signUp } from './supabase.js';
 
 const canvas = document.getElementById('game');
@@ -26,7 +26,6 @@ const saveModePill = document.getElementById('saveModePill');
 const playPauseBtn = document.getElementById('playPauseBtn');
 const restartBtn = document.getElementById('restartBtn');
 const resetProgressBtn = document.getElementById('resetProgressBtn');
-const pauseBtn = document.getElementById('pauseBtn');
 const fullscreenBtn = document.getElementById('fullscreenBtn');
 const shopToggleBtn = document.getElementById('shopToggleBtn');
 const accountToggleBtn = document.getElementById('accountToggleBtn');
@@ -70,7 +69,7 @@ const PHASE = {
   DEAD: 'dead',
 };
 
-let profile = loadLocalProfile();
+let profile = saveLocalProfile(defaultProfile());
 let currentUser = null;
 let saveMode = hasSupabaseConfig(config) ? 'supabase-ready' : 'local-only';
 let syncMessage = '';
@@ -123,10 +122,16 @@ async function boot() {
       else syncMessage = 'Play here now, or sign in to keep your save across devices.';
       onAuthStateChange(async (user) => {
         currentUser = user;
-        if (currentUser) await syncProfileFromCloud();
-        else {
+        if (currentUser) {
+          clearAuthInputs();
+          await syncProfileFromCloud();
+          closeSheets();
+          setOverlay('', '', false, 'none');
+          showToast('Signed in. Save loaded.');
+        } else {
           saveMode = 'local-only';
-          syncMessage = 'Signed out. This device keeps the current save locally.';
+          syncMessage = 'Signed out. This device keeps the current session locally.';
+          clearAuthInputs();
           updateAuthButtons();
           updateUi();
         }
@@ -217,6 +222,34 @@ function centerSnake() {
   countdownUntil = 0;
 }
 
+function clearAuthInputs() {
+  authEmail.value = '';
+  authPassword.value = '';
+}
+
+function getValidStartDirections() {
+  const head = CENTER_SPAWN[0];
+  const bodyKeys = new Set(CENTER_SPAWN.slice(1).map(keyOf));
+  const options = [
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+    { x: -1, y: 0 },
+  ].filter((dir) => {
+    const next = { x: head.x + dir.x, y: head.y + dir.y };
+    if (next.x < 0 || next.y < 0 || next.x >= GRID || next.y >= GRID) return false;
+    if (bodyKeys.has(keyOf(next))) return false;
+    if (obstacles.some((cell) => sameCell(cell, next))) return false;
+    return true;
+  });
+  return options.length ? options : [{ x: 1, y: 0 }];
+}
+
+function randomStartDirection() {
+  const options = getValidStartDirections();
+  return options[Math.floor(Math.random() * options.length)];
+}
+
 function resetGameState(autoStart = false, options = {}) {
   score = 0;
   bankedRunCoins = 0;
@@ -230,8 +263,8 @@ function resetGameState(autoStart = false, options = {}) {
   centerSnake();
   food = randomFreeCell();
   setPhase(PHASE.READY);
-  if (autoStart) beginCountdown({ x: 1, y: 0 });
-  else setOverlay('Ready', 'Pick a direction to start. Buttons and swipes do the same thing.', true, PHASE.READY);
+  if (autoStart) beginCountdown(randomStartDirection());
+  else setOverlay('Ready', 'Press Start for a short countdown. The snake will launch in a random valid direction.', true, PHASE.READY);
   updateUi();
   draw();
   if (!options.skipSync) syncProfileToCloud(false, options.reason || 'reset');
@@ -279,11 +312,11 @@ function commitCountdownStart() {
 
 function startOrResumeGame() {
   if (phase === PHASE.DEAD) {
-    resetGameState(false, { reason: 'new run' });
+    resetGameState(true, { reason: 'new run' });
     return;
   }
   if (phase === PHASE.READY || phase === PHASE.LEVEL_UP) {
-    setOverlay('Choose a direction', 'Tap or swipe to pick the first move.', true, overlayMode);
+    beginCountdown(randomStartDirection());
     return;
   }
   if (phase === PHASE.PAUSED) {
@@ -310,12 +343,9 @@ function togglePlayPause() {
 
 function applyDirectionInput(x, y) {
   const requested = { x, y };
-  if (phase === PHASE.COUNTDOWN) {
-    beginCountdown(requested);
-    return;
-  }
+  if (phase === PHASE.COUNTDOWN) return;
   if (isRoundReadyToStart()) {
-    beginCountdown(requested);
+    beginCountdown(randomStartDirection());
     return;
   }
   const heading = currentHeading();
@@ -566,7 +596,7 @@ function isBlocked(cell, extra = []) {
 }
 
 function endGame() {
-  const summary = `Score ${score}. Coins banked this run: +${bankedRunCoins}. Pick a direction to start again.`;
+  const summary = `Score ${score}. Coins banked this run: +${bankedRunCoins}. Press Start when you want another run.`;
   resetBoardForLevel(PHASE.DEAD);
   setOverlay('Game over', summary, true, PHASE.DEAD);
   syncProfileToCloud(false, 'death');
@@ -592,8 +622,7 @@ function updateUi() {
   else if (phase === PHASE.DEAD) state = 'game over';
   statePill.textContent = `State: ${state}`;
 
-  playPauseBtn.textContent = phase === PHASE.DEAD ? 'New run' : (phase === PHASE.RUNNING || phase === PHASE.COUNTDOWN ? 'Pause' : 'Play');
-  pauseBtn.textContent = phase === PHASE.RUNNING || phase === PHASE.COUNTDOWN ? 'Pause' : 'Resume';
+  playPauseBtn.textContent = phase === PHASE.DEAD ? 'Start again' : (phase === PHASE.RUNNING || phase === PHASE.COUNTDOWN ? 'Pause' : phase === PHASE.PAUSED ? 'Resume' : 'Start');
   shopNote.textContent = phase === PHASE.RUNNING ? 'You can look now, but changing things between rounds is easier.' : 'Coins, prices, and what you can afford are shown here clearly.';
 
   if (currentUser) {
@@ -852,8 +881,14 @@ function wireEvents() {
   }));
 
   playPauseBtn.addEventListener('click', togglePlayPause);
-  restartBtn.addEventListener('click', () => resetGameState(false, { reason: 'restart' }));
-  pauseBtn.addEventListener('click', togglePlayPause);
+  restartBtn.addEventListener('click', () => {
+    const needsConfirm = phase !== PHASE.READY || score > 0 || levelIndex > 0;
+    if (needsConfirm) {
+      const ok = window.confirm('Reset this run and return to the starting board?');
+      if (!ok) return;
+    }
+    resetGameState(false, { reason: 'restart' });
+  });
   fullscreenBtn?.addEventListener('click', goFullscreen);
 
   shopToggleBtn.addEventListener('click', toggleShop);
@@ -864,7 +899,7 @@ function wireEvents() {
 
   messagePrimaryBtn.addEventListener('click', () => {
     closeShop();
-    setOverlay('Choose a direction', 'Tap or swipe to pick the first move.', true, PHASE.READY);
+    beginCountdown(randomStartDirection());
   });
   messageSecondaryBtn.addEventListener('click', () => openShop(true));
 
@@ -883,8 +918,8 @@ function wireEvents() {
     try {
       const { email, password } = getAuthInput();
       await signIn(email, password);
-      syncMessage = 'Signed in.';
-      showToast('Signed in.');
+      syncMessage = 'Signing you in...';
+      updateUi();
     } catch (error) {
       syncMessage = error.message;
       updateUi();

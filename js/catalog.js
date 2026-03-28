@@ -1,12 +1,12 @@
 export const STORAGE_KEY = 'snake-deluxe-save-v2';
-export const COIN_SPAWN_EVERY = 4;
-export const COIN_LIFE_STEPS = 16;
+export const COIN_SPAWN_EVERY = 3;
+export const COIN_LIFE_STEPS = 24;
 
 export const levelDefs = [
   { name: 'Garden Start', speed: 7.2, target: 6, obstacles: [], tunnels: 0, coinValue: 1 },
   { name: 'Twin Tunnels', speed: 8.1, target: 8, obstacles: [], tunnels: 1, coinValue: 1 },
   { name: 'Brick Lane', speed: 9.1, target: 10, obstacles: line(6, 6, 6, 13).concat(line(13, 6, 13, 13)), tunnels: 1, coinValue: 2 },
-  { name: 'Crosswind', speed: 10.1, target: 12, obstacles: line(4, 10, 8, 10).concat(line(11, 10, 15, 10)).concat(line(10, 4, 10, 8)).concat(line(10, 11, 10, 15)), tunnels: 2, coinValue: 2 },
+  { name: 'Crosswind', speed: 10.1, target: 12, obstacles: line(4, 10, 7, 10).concat(line(12, 10, 15, 10)).concat(line(10, 4, 10, 7)).concat(line(10, 12, 10, 15)), tunnels: 2, coinValue: 2 },
   { name: 'Vault', speed: 11.3, target: 14, obstacles: rectBorder(4, 4, 11, 11), tunnels: 2, coinValue: 3 }
 ];
 

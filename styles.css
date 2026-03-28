@@ -175,32 +175,47 @@ button, input, canvas { font: inherit; }
   border-radius: 24px;
   border: 1px solid var(--line-strong);
   overflow: hidden;
+  padding: 8px;
 }
-canvas { display: block; width: 100%; height: 100%; touch-action: none; background: #09111d; }
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  background: #09111d;
+  border-radius: 18px;
+}
 .overlay {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 20px;
-  background: rgba(2, 6, 23, 0.14);
-  backdrop-filter: blur(4px);
+  padding: 14px;
+  background: transparent;
   transition: opacity 0.2s ease;
   z-index: 4;
+  pointer-events: none;
 }
 .overlay.hidden { opacity: 0; pointer-events: none; display: none !important; }
 .message {
-  width: min(100%, 360px);
-  background: rgba(12, 20, 35, 0.94);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 20px;
-  padding: 18px;
+  width: min(100%, 320px);
+  background: rgba(12, 20, 35, 0.86);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  padding: 12px 14px;
   text-align: center;
-  box-shadow: 0 12px 36px rgba(0,0,0,0.32);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.22);
+  pointer-events: auto;
 }
-.message h2 { margin: 0 0 8px; font-size: 1.25rem; }
-.message p, .sheet-note, .sheet-subtle, .auth-note, .help, .item-desc { margin: 0; color: var(--muted); line-height: 1.4; }
-.message-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+.overlay.compact {
+  align-content: start;
+}
+.overlay.compact .message {
+  margin-top: 8px;
+}
+.message h2 { margin: 0 0 6px; font-size: 1.05rem; }
+.message p, .sheet-note, .sheet-subtle, .auth-note, .help, .item-desc { margin: 0; color: var(--muted); line-height: 1.35; }
+.message-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
 .toast {
   position: absolute;
   left: 50%; bottom: 14px; transform: translateX(-50%);
@@ -217,15 +232,15 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; backgrou
 button {
   appearance: none;
   border: 0;
-  border-radius: 16px;
-  min-height: 50px;
-  padding: 12px 16px;
+  border-radius: 14px;
+  min-height: 46px;
+  padding: 10px 14px;
   font-weight: 800;
-  font-size: 0.96rem;
+  font-size: 0.92rem;
   cursor: pointer;
   color: white;
   background: linear-gradient(180deg, var(--accent), var(--accent-2));
-  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.24);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
 }
 button.secondary {
   background: rgba(255,255,255,0.08);
@@ -244,50 +259,50 @@ button:disabled { opacity: 0.58; cursor: default; transform: none; }
 .mini { min-height: 42px; padding: 8px 12px; font-size: 0.88rem; box-shadow: none; }
 .control-dock {
   display: grid;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(13, 23, 40, 0.94), rgba(9, 16, 30, 0.98));
+  gap: 6px;
+  padding: 8px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(13, 23, 40, 0.9), rgba(9, 16, 30, 0.95));
   border: 1px solid var(--line);
 }
 .dock-main-actions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
 }
 .touch-cluster {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   justify-items: center;
 }
 .touch-row {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: center;
   width: 100%;
 }
 .touch-row-top, .touch-row-down { margin: 0; }
 .dir {
-  width: min(22vw, 110px);
-  min-width: 84px;
-  min-height: 64px;
+  width: min(20vw, 88px);
+  min-width: 64px;
+  min-height: 50px;
   padding: 0;
   display: grid;
   place-items: center;
-  font-size: 1.6rem;
-  background: rgba(255,255,255,0.09);
+  font-size: 1.2rem;
+  background: rgba(255,255,255,0.07);
   color: var(--text);
-  border: 1px solid rgba(255,255,255,0.09);
+  border: 1px solid rgba(255,255,255,0.08);
   box-shadow: none;
   touch-action: manipulation;
 }
 .dock-center-badge {
-  width: min(32vw, 180px);
-  min-width: 132px;
-  min-height: 64px;
-  border-radius: 20px;
+  width: min(34vw, 176px);
+  min-width: 120px;
+  min-height: 50px;
+  border-radius: 18px;
   color: var(--muted);
-  padding: 10px;
+  padding: 8px;
   display: grid;
   place-items: center;
   text-align: center;
@@ -424,10 +439,10 @@ input {
   .hud-actions { grid-area: actions; }
   .hud-chip { min-height: 44px; }
   .value { font-size: 0.96rem; }
-  .dock-main-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dock-main-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dock-main-actions .desktop-only { display: none !important; }
-  .dir { width: min(24vw, 98px); min-width: 74px; min-height: 58px; }
-  .dock-center-badge { width: min(36vw, 160px); min-width: 118px; min-height: 58px; }
+  .dir { width: min(23vw, 84px); min-width: 62px; min-height: 48px; }
+  .dock-center-badge { width: min(36vw, 150px); min-width: 110px; min-height: 48px; }
   .items, .auth-grid { grid-template-columns: 1fr; }
 }
 
@@ -441,13 +456,13 @@ input {
   .value { font-size: 0.88rem; }
   .board-topline { gap: 5px; }
   .mini-pill { font-size: 0.72rem; padding: 5px 8px; }
-  .control-dock { padding: 8px; border-radius: 20px; }
-  .dock-main-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-  .dock-main-actions button { min-height: 46px; padding: 10px 8px; font-size: 0.88rem; }
-  .dir { width: min(25vw, 88px); min-width: 68px; min-height: 54px; font-size: 1.35rem; }
-  .dock-center-badge { width: min(34vw, 132px); min-width: 102px; min-height: 54px; padding: 8px; }
-  .dock-center-badge span { font-size: 0.8rem; }
-  .dock-center-badge small { font-size: 0.66rem; }
+  .control-dock { padding: 7px; border-radius: 18px; }
+  .dock-main-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .dock-main-actions button { min-height: 42px; padding: 9px 8px; font-size: 0.84rem; }
+  .dir { width: min(24vw, 76px); min-width: 58px; min-height: 46px; font-size: 1.15rem; }
+  .dock-center-badge { width: min(34vw, 124px); min-width: 96px; min-height: 46px; padding: 7px; }
+  .dock-center-badge span { font-size: 0.74rem; }
+  .dock-center-badge small { font-size: 0.62rem; }
   .message-actions, .account-actions, .auth-actions, .auth-secondary { flex-direction: column; }
   .account-tools { flex-direction: column; align-items: stretch; }
   .sheet { left: 6px; right: 6px; bottom: max(6px, calc(6px + var(--safe-bottom))); border-radius: 24px; }
