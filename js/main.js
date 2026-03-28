@@ -255,6 +255,7 @@ function setEntryChoiceOpen(isOpen) {
   entryChoiceOpen = isOpen;
   entryModal.classList.toggle('hidden', !isOpen);
   entryModal.setAttribute('aria-hidden', String(!isOpen));
+  document.body.classList.toggle('entry-open', isOpen);
 }
 
 function continueWithLocalPlay() {

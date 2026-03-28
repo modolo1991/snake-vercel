@@ -550,3 +550,16 @@ input {
 .entry-card, .entry-actions, .entry-actions button {
   pointer-events: auto;
 }
+
+
+body.entry-open .app-shell,
+body.entry-open .sheet,
+body.entry-open .sheet-backdrop {
+  pointer-events: none !important;
+}
+body.entry-open .entry-modal,
+body.entry-open .entry-card,
+body.entry-open .entry-actions,
+body.entry-open .entry-actions button {
+  pointer-events: auto !important;
+}
