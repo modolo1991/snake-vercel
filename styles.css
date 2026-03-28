@@ -538,3 +538,15 @@ input {
 @media (min-width: 701px) {
   .desktop-only { display: inline-flex; }
 }
+
+
+.entry-modal {
+  pointer-events: auto;
+  z-index: 50;
+}
+.entry-modal.hidden {
+  display: none !important;
+}
+.entry-card, .entry-actions, .entry-actions button {
+  pointer-events: auto;
+}
