@@ -1,4 +1,4 @@
-import { catalog, COIN_LIFE_STEPS, COIN_SPAWN_EVERY, defaultProfile, levelDefs } from './catalog.js';
+import { catalog, coinTypes, COIN_LIFE_STEPS, COIN_SPAWN_EVERY, defaultProfile, levelDefs, POWER_MODE_DURATION_MS, POWER_STAR_LIFE_STEPS, POWER_STAR_SPAWN_CHANCE } from './catalog.js';
 import { getAppConfig, hasSupabaseConfig } from './config.js';
 import { loadLocalProfile, resetLocalProfile, saveLocalProfile, sanitizeProfile } from './storage.js';
 import { fetchRemoteProfile, getSession, getSupabaseClient, onAuthStateChange, saveRemoteProfile, sendMagicLink, signIn, signOut, signUp } from './supabase.js';
@@ -83,7 +83,7 @@ const STARTING_LIVES = 3;
 const HEART_SPAWN_CHANCE = 0.09;
 const HEART_LIFE_STEPS = 30;
 
-let profile = loadLocalProfile();
+let profile = defaultProfile();
 let currentUser = null;
 let saveMode = hasSupabaseConfig(config) ? 'supabase-ready' : 'local-only';
 let syncMessage = '';
@@ -97,6 +97,7 @@ let lastHeading = { x: 1, y: 0 };
 let food = null;
 let coin = null;
 let heart = null;
+let powerStar = null;
 let obstacles = [];
 let tunnels = [];
 let score = 0;
@@ -117,6 +118,7 @@ let countdownRemaining = 0;
 let countdownUntil = 0;
 let activeShopTab = 'skins';
 let shopFeedbackTimer = 0;
+let powerModeUntil = 0;
 let pausedPhase = null;
 let pausedCountdownMs = 0;
 let entryChoiceOpen = true;
@@ -153,10 +155,12 @@ async function boot() {
           showToast('Signed in. Save loaded.');
         } else {
           saveMode = 'local-only';
-          syncMessage = 'Signed out. Choose local play or sign in to sync across devices.';
+          profile = resetLocalProfile();
+          syncMessage = 'Signed out. Local play starts fresh until you sign back in.';
           clearAuthInputs();
           setEntryChoiceOpen(true);
           closeSheets();
+          resetGameState(false, { reason: 'signed out', skipSync: true });
           updateAuthButtons();
           updateUi();
         }
@@ -269,6 +273,7 @@ function setEntryChoiceOpen(isOpen) {
 }
 
 function continueWithLocalPlay() {
+  profile = defaultProfile();
   setEntryChoiceOpen(false);
   closeSheets();
   resetGameState(false, { reason: 'local play chosen', skipSync: true });
@@ -296,10 +301,12 @@ function resetGameState(autoStart = false, options = {}) {
   levelIndex = 0;
   levelFood = 0;
   usedShield = false;
+  powerModeUntil = 0;
   lastTime = 0;
   tunnelCooldown = 0;
   coin = null;
   heart = null;
+  powerStar = null;
   lives = STARTING_LIVES;
   applyLevel();
   centerSnake();
@@ -323,6 +330,7 @@ function resetBoardForLevel(phaseAfterReset = PHASE.READY) {
   food = randomFreeCell();
   coin = null;
   heart = null;
+  powerStar = null;
   setPhase(phaseAfterReset);
   draw();
 }
@@ -421,7 +429,7 @@ function applyDirectionInput(x, y) {
 
 async function mutateProfile(mutator, options = {}) {
   profile = sanitizeProfile(mutator({ ...profile }));
-  profile = saveLocalProfile(profile);
+  profile = saveLocalProfile(profile, currentUser?.id || null);
   renderShop();
   updateUi();
   draw();
@@ -577,15 +585,31 @@ async function awardCoin(amount) {
 
 function maybeSpawnCoin() {
   if (!coin && score > 0 && score % COIN_SPAWN_EVERY === 0) {
-    const pos = randomFreeCell([food, heart].filter(Boolean));
-    coin = { x: pos.x, y: pos.y, life: COIN_LIFE_STEPS };
+    const pos = randomFreeCell([food, heart, powerStar].filter(Boolean));
+    const type = coinTypes[Math.floor(Math.random() * coinTypes.length)];
+    coin = { x: pos.x, y: pos.y, life: COIN_LIFE_STEPS, type };
   }
 }
 
 function maybeSpawnHeart() {
   if (heart || Math.random() > HEART_SPAWN_CHANCE) return;
-  const pos = randomFreeCell([food, coin].filter(Boolean));
+  const pos = randomFreeCell([food, coin, powerStar].filter(Boolean));
   heart = { x: pos.x, y: pos.y, life: HEART_LIFE_STEPS };
+}
+
+function maybeSpawnPowerStar() {
+  if (powerStar || Math.random() > POWER_STAR_SPAWN_CHANCE) return;
+  const pos = randomFreeCell([food, coin, heart].filter(Boolean));
+  powerStar = { x: pos.x, y: pos.y, life: POWER_STAR_LIFE_STEPS };
+}
+
+function isPowerModeActive() {
+  return powerModeUntil > performance.now();
+}
+
+function activatePowerMode() {
+  powerModeUntil = performance.now() + POWER_MODE_DURATION_MS;
+  showToast('Power mode · 10s invincible');
 }
 
 function consumeShield() {
@@ -608,6 +632,10 @@ async function step() {
   const willGrow = food && sameCell(head, food);
   const hitSelf = snake.some((seg, index) => !(!willGrow && index === snake.length - 1 && sameCell(seg, tail)) && sameCell(seg, head));
   if (hitWall || hitObstacle || hitSelf) {
+    if (isPowerModeActive()) {
+      showToast('Power mode saved you.');
+      return;
+    }
     if (consumeShield()) return;
     return loseLife();
   }
@@ -620,16 +648,17 @@ async function step() {
     levelFood += 1;
     grew = true;
     if (score > profile.best) mutateProfile((draft) => ({ ...draft, best: score }), { reason: 'new best' });
-    food = randomFreeCell([coin, heart].filter(Boolean));
+    food = randomFreeCell([coin, heart, powerStar].filter(Boolean));
     maybeSpawnCoin();
     maybeSpawnHeart();
+    maybeSpawnPowerStar();
     if (levelFood >= activeLevel().target) {
       levelUp();
       return;
     }
   }
-  if (coin && sameCell(snake[0], coin)) {
-    const value = activeLevel().coinValue;
+  if (coin && snake.some((seg) => sameCell(seg, coin))) {
+    const value = coin.type?.value || 1;
     coin = null;
     await awardCoin(value);
   }
@@ -637,6 +666,10 @@ async function step() {
     heart = null;
     lives += 1;
     showToast('+1 life');
+  }
+  if (powerStar && snake.some((seg) => sameCell(seg, powerStar))) {
+    powerStar = null;
+    activatePowerMode();
   }
   if (!grew) snake.pop();
   if (coin) {
@@ -646,6 +679,10 @@ async function step() {
   if (heart) {
     heart.life -= 1;
     if (heart.life <= 0) heart = null;
+  }
+  if (powerStar) {
+    powerStar.life -= 1;
+    if (powerStar.life <= 0) powerStar = null;
   }
   updateUi();
   draw();
@@ -661,16 +698,20 @@ function applyTunnelTravel() {
 
 function applyMagnet() {
   if (!coin || !hasPower('power-magnet')) return;
-  const head = snake[0];
-  const dx = head.x - coin.x;
-  const dy = head.y - coin.y;
-  const dist = Math.abs(dx) + Math.abs(dy);
-  if (dist === 0 || dist > 6) return;
+  const nearestSegment = snake
+    .map((seg) => ({ seg, dist: Math.abs(seg.x - coin.x) + Math.abs(seg.y - coin.y) }))
+    .sort((a, b) => a.dist - b.dist)[0];
+  if (!nearestSegment || nearestSegment.dist === 0 || nearestSegment.dist > 6) return;
+  if (nearestSegment.dist === 1) {
+    coin = { ...nearestSegment.seg, type: coin.type, life: coin.life };
+    return;
+  }
 
-  const steps = dist <= 2 ? 2 : 1;
+  const target = nearestSegment.seg;
+  const steps = nearestSegment.dist <= 2 ? 2 : 1;
   for (let stepIndex = 0; stepIndex < steps; stepIndex += 1) {
-    const moveDx = head.x - coin.x;
-    const moveDy = head.y - coin.y;
+    const moveDx = target.x - coin.x;
+    const moveDy = target.y - coin.y;
     if (moveDx === 0 && moveDy === 0) break;
     const options = [];
     if (Math.abs(moveDx) >= Math.abs(moveDy)) {
@@ -680,15 +721,17 @@ function applyMagnet() {
       options.push({ x: coin.x, y: coin.y + Math.sign(moveDy) });
       if (moveDx !== 0) options.push({ x: coin.x + Math.sign(moveDx), y: coin.y });
     }
-    const candidate = options.find((cell) => !isBlocked(cell, [food]));
+    const candidate = options.find((cell) => !isBlocked(cell, [food], true) || snake.some((seg) => sameCell(seg, cell)));
     if (!candidate) break;
     Object.assign(coin, candidate);
+    if (snake.some((seg) => sameCell(seg, coin))) break;
   }
 }
 
-function isBlocked(cell, extra = []) {
+function isBlocked(cell, extra = [], ignoreSnake = false) {
   if (cell.x < 0 || cell.y < 0 || cell.x >= GRID || cell.y >= GRID) return true;
-  return [...snake, ...obstacles, ...tunnels.flatMap((pair) => [pair.a, pair.b]), ...extra].some((entry) => sameCell(entry, cell));
+  const snakeCells = ignoreSnake ? [] : snake;
+  return [...snakeCells, ...obstacles, ...tunnels.flatMap((pair) => [pair.a, pair.b]), ...extra].some((entry) => sameCell(entry, cell));
 }
 
 function clearRunPowerPurchases() {
@@ -697,7 +740,7 @@ function clearRunPowerPurchases() {
     ...profile,
     owned: persistentOwned,
     activePowers: [],
-  });
+  }, currentUser?.id || null);
 }
 
 function loseLife() {
@@ -728,15 +771,20 @@ function updateUi() {
   levelEl.textContent = String(levelIndex + 1);
   livesEl.textContent = String(lives);
   speedPill.textContent = `Speed: ${getSpeed().toFixed(1)} tiles/sec`;
-  goalPill.textContent = hasPower('power-shield') && !usedShield
-    ? `Shield ready • ${Math.max(activeLevel().target - levelFood, 0)} food to go`
-    : `Next level: ${Math.max(activeLevel().target - levelFood, 0)} food`;
-  skinPill.textContent = hasPower('power-magnet')
-    ? `Skin: ${currentSkin().name} • Magnet on`
-    : `Skin: ${currentSkin().name}`;
+  goalPill.textContent = isPowerModeActive()
+    ? `Power mode • ${Math.max(0, Math.ceil((powerModeUntil - performance.now()) / 1000))}s left`
+    : hasPower('power-shield') && !usedShield
+      ? `Shield ready • ${Math.max(activeLevel().target - levelFood, 0)} food to go`
+      : `Next level: ${Math.max(activeLevel().target - levelFood, 0)} food`;
+  skinPill.textContent = isPowerModeActive()
+    ? `Skin: ${currentSkin().name} • POWER MODE`
+    : hasPower('power-magnet')
+      ? `Skin: ${currentSkin().name} • Magnet on`
+      : `Skin: ${currentSkin().name}`;
   saveModePill.textContent = `Save: ${currentUser ? 'auto cloud sync' : saveMode.replace('-', ' ')}`;
   boardShell.classList.toggle('shield-ready', hasPower('power-shield') && !usedShield);
   boardShell.classList.toggle('magnet-ready', hasPower('power-magnet'));
+  boardShell.classList.toggle('power-mode', isPowerModeActive());
 
   let state = 'ready';
   if (phase === PHASE.COUNTDOWN) state = `starting in ${countdownRemaining}`;
@@ -807,9 +855,40 @@ function drawCoin() {
       ctx.setLineDash([]);
     }
   }
-  ctx.fillStyle = 'rgba(250, 204, 21, 0.17)'; ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.36, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.24, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#fde68a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.17, 0, Math.PI * 2); ctx.stroke();
+  const coinStyle = coin.type || coinTypes[0];
+  ctx.fillStyle = coinStyle.glow; ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.36, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = coinStyle.fill; ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.24, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = coinStyle.ring; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.17, 0, Math.PI * 2); ctx.stroke();
+}
+
+function drawPowerStar() {
+  if (!powerStar) return;
+  const cx = powerStar.x * CELL + CELL / 2;
+  const cy = powerStar.y * CELL + CELL / 2;
+  const colors = ['#fb7185', '#facc15', '#34d399', '#38bdf8', '#a78bfa'];
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(performance.now() / 450);
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.beginPath(); ctx.arc(0, 0, CELL * 0.38, 0, Math.PI * 2); ctx.fill();
+  for (let i = 0; i < 5; i += 1) {
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.beginPath();
+    ctx.moveTo(0, -CELL * 0.28);
+    ctx.lineTo(CELL * 0.08, -CELL * 0.08);
+    ctx.lineTo(CELL * 0.28, -CELL * 0.08);
+    ctx.lineTo(CELL * 0.12, CELL * 0.04);
+    ctx.lineTo(CELL * 0.18, CELL * 0.24);
+    ctx.lineTo(0, CELL * 0.11);
+    ctx.lineTo(-CELL * 0.18, CELL * 0.24);
+    ctx.lineTo(-CELL * 0.12, CELL * 0.04);
+    ctx.lineTo(-CELL * 0.28, -CELL * 0.08);
+    ctx.lineTo(-CELL * 0.08, -CELL * 0.08);
+    ctx.closePath();
+    ctx.fill();
+    ctx.rotate((Math.PI * 2) / 5);
+  }
+  ctx.restore();
 }
 function drawHeart() {
   if (!heart) return;
@@ -842,6 +921,8 @@ function drawSnake() {
   const skin = currentSkin().colors;
   const heading = currentHeading();
   const shieldActive = hasPower('power-shield') && !usedShield;
+  const powerMode = isPowerModeActive();
+  const rainbow = ['#fb7185', '#f97316', '#facc15', '#4ade80', '#38bdf8', '#a78bfa'];
   snake.forEach((seg, index) => {
     const x = seg.x * CELL + 2;
     const y = seg.y * CELL + 2;
@@ -858,13 +939,14 @@ function drawSnake() {
       ctx.arc(baseX, baseY, CELL * 0.95, 0, Math.PI * 2);
       ctx.fill();
     }
-    drawRoundedRect(x, y, size, size, 7, index === 0 ? skin.head : skin.body);
+    const segmentColor = powerMode ? rainbow[(index + Math.floor(performance.now() / 110)) % rainbow.length] : (index === 0 ? skin.head : skin.body);
+    drawRoundedRect(x, y, size, size, 7, segmentColor);
     if (index === 0) {
       const eyeOffsetX = heading.x === 0 ? CELL * 0.15 : heading.x * CELL * 0.12;
       const eyeOffsetY = heading.y === 0 ? CELL * 0.15 : heading.y * CELL * 0.12;
       const baseX = seg.x * CELL + CELL / 2;
       const baseY = seg.y * CELL + CELL / 2;
-      ctx.fillStyle = skin.eye; ctx.beginPath(); ctx.arc(baseX - 5 + eyeOffsetX, baseY - 5 + eyeOffsetY, 2.3, 0, Math.PI * 2); ctx.arc(baseX + 5 + eyeOffsetX, baseY - 5 + eyeOffsetY, 2.3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = powerMode ? '#ffffff' : skin.eye; ctx.beginPath(); ctx.arc(baseX - 5 + eyeOffsetX, baseY - 5 + eyeOffsetY, 2.3, 0, Math.PI * 2); ctx.arc(baseX + 5 + eyeOffsetX, baseY - 5 + eyeOffsetY, 2.3, 0, Math.PI * 2); ctx.fill();
       if (shieldActive) {
         ctx.strokeStyle = 'rgba(186, 230, 253, 0.98)';
         ctx.lineWidth = 3.6;
@@ -883,9 +965,9 @@ function drawSnake() {
 function drawLevelBadge() {
   ctx.fillStyle = 'rgba(7, 16, 28, 0.72)'; ctx.fillRect(8, 8, 250, 50);
   ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 18px system-ui'; ctx.fillText(`Level ${levelIndex + 1}: ${activeLevel().name}`, 18, 30);
-  ctx.fillStyle = '#94a3b8'; ctx.font = '14px system-ui'; ctx.fillText(`Coins x${activeLevel().coinValue} • target ${activeLevel().target}`, 18, 48);
+  ctx.fillStyle = '#94a3b8'; ctx.font = '14px system-ui'; ctx.fillText(`Coins: 1 / 2 / 3 • target ${activeLevel().target}`, 18, 48);
 }
-function draw() { ctx.clearRect(0, 0, SIZE, SIZE); drawBoard(); drawObstacles(); drawTunnels(); drawFood(); drawCoin(); drawHeart(); drawSnake(); drawLevelBadge(); }
+function draw() { ctx.clearRect(0, 0, SIZE, SIZE); drawBoard(); drawObstacles(); drawTunnels(); drawFood(); drawCoin(); drawPowerStar(); drawHeart(); drawSnake(); drawLevelBadge(); }
 
 function updateCountdown(now) {
   if (phase !== PHASE.COUNTDOWN) return;
@@ -910,7 +992,7 @@ function loop(timestamp) {
     while (accumulator >= interval) {
       accumulator -= interval;
       if (phase !== PHASE.RUNNING) break;
-      step();
+      step().catch((error) => console.error('Snake step failed', error));
     }
   }
   requestAnimationFrame(loop);
@@ -969,6 +1051,8 @@ function getAuthInput() {
 async function syncProfileFromCloud() {
   if (!currentUser) return;
   try {
+    const cachedLocal = loadLocalProfile(currentUser.id);
+    profile = cachedLocal;
     const remote = await fetchRemoteProfile(currentUser.id);
     if (!remote) {
       await syncProfileToCloud(true, 'first cloud save');
@@ -978,7 +1062,7 @@ async function syncProfileFromCloud() {
       const localTime = new Date(profile.updatedAt || 0).getTime();
       const remoteTime = new Date(remote.updatedAt || 0).getTime();
       profile = remoteTime >= localTime ? remote : profile;
-      profile = saveLocalProfile(profile);
+      profile = saveLocalProfile(profile, currentUser?.id || null);
       if (localTime > remoteTime) await syncProfileToCloud(true, 'login merge');
       saveMode = 'cloud-sync';
       syncMessage = 'Cloud save loaded.';
@@ -998,7 +1082,7 @@ async function syncProfileToCloud(force = false, reason = 'save') {
   syncInFlight = true;
   try {
     const remote = await saveRemoteProfile(currentUser.id, profile);
-    if (remote) profile = saveLocalProfile(remote);
+    if (remote) profile = saveLocalProfile(remote, currentUser.id);
     saveMode = 'cloud-sync';
     syncMessage = `Saved automatically after ${reason}.`;
   } catch (error) {
@@ -1133,7 +1217,7 @@ function wireEvents() {
   resetProgressBtn.addEventListener('click', async () => {
     const ok = window.confirm(currentUser ? 'Reset all progress everywhere? This clears best score, coins, skins, upgrades, and your current run.' : 'Reset all progress on this device? This clears best score, coins, skins, upgrades, and your current run.');
     if (!ok) return;
-    profile = resetLocalProfile();
+    profile = resetLocalProfile(currentUser?.id || null);
     if (currentUser) await syncProfileToCloud(true, 'progress reset');
     resetGameState(false, { reason: 'progress reset', skipSync: true });
     syncMessage = currentUser ? 'Progress reset here and in the cloud.' : 'Progress reset on this device.';

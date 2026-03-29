@@ -1,5 +1,9 @@
 import { defaultProfile, STORAGE_KEY } from './catalog.js';
 
+function profileKey(userId) {
+  return userId ? `${STORAGE_KEY}:user:${userId}` : `${STORAGE_KEY}:guest`;
+}
+
 export function sanitizeProfile(raw = {}) {
   const base = defaultProfile();
   return {
@@ -12,20 +16,29 @@ export function sanitizeProfile(raw = {}) {
   };
 }
 
-export function loadLocalProfile() {
+export function loadLocalProfile(userId = null) {
   try {
-    return sanitizeProfile(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'));
+    if (!userId) return defaultProfile();
+    return sanitizeProfile(JSON.parse(localStorage.getItem(profileKey(userId)) || '{}'));
   } catch {
     return defaultProfile();
   }
 }
 
-export function saveLocalProfile(profile) {
+export function saveLocalProfile(profile, userId = null) {
   const clean = sanitizeProfile({ ...profile, updatedAt: new Date().toISOString() });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
+  if (userId) {
+    localStorage.setItem(profileKey(userId), JSON.stringify(clean));
+  }
   return clean;
 }
 
-export function resetLocalProfile() {
-  return saveLocalProfile(defaultProfile());
+export function resetLocalProfile(userId = null) {
+  const clean = sanitizeProfile(defaultProfile());
+  if (userId) {
+    localStorage.setItem(profileKey(userId), JSON.stringify(clean));
+  } else {
+    localStorage.removeItem(profileKey());
+  }
+  return clean;
 }

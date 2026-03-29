@@ -198,6 +198,15 @@ button, input, canvas { font: inherit; }
 .board-shell.magnet-ready canvas {
   filter: saturate(1.04);
 }
+
+.board-shell.power-mode {
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.22), 0 0 0 1px rgba(255,255,255,0.12), 0 0 22px rgba(251, 113, 133, 0.22), 0 0 34px rgba(56, 189, 248, 0.18), 0 0 46px rgba(250, 204, 21, 0.18);
+  animation: power-mode-shell 0.7s linear infinite;
+}
+@keyframes power-mode-shell {
+  0% { filter: hue-rotate(0deg); }
+  100% { filter: hue-rotate(360deg); }
+}
 canvas {
   display: block;
   width: 100%;
@@ -285,6 +294,7 @@ canvas {
   font-size: 0.88rem;
   box-shadow: 0 12px 24px rgba(0,0,0,0.28);
   z-index: 5;
+  pointer-events: none;
 }
 button {
   appearance: none;

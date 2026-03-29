@@ -1,6 +1,15 @@
 export const STORAGE_KEY = 'snake-deluxe-save-v2';
 export const COIN_SPAWN_EVERY = 2;
 export const COIN_LIFE_STEPS = 24;
+export const POWER_STAR_LIFE_STEPS = 20;
+export const POWER_MODE_DURATION_MS = 10000;
+export const POWER_STAR_SPAWN_CHANCE = 0.04;
+
+export const coinTypes = [
+  { id: 'amber', value: 1, fill: '#facc15', ring: '#fde68a', glow: 'rgba(250, 204, 21, 0.17)' },
+  { id: 'teal', value: 2, fill: '#2dd4bf', ring: '#99f6e4', glow: 'rgba(45, 212, 191, 0.17)' },
+  { id: 'violet', value: 3, fill: '#a78bfa', ring: '#ddd6fe', glow: 'rgba(167, 139, 250, 0.19)' },
+];
 
 export const levelDefs = [
   { name: 'Garden Start', speed: 7.2, target: 6, obstacles: [], tunnels: 0, coinValue: 1 },
