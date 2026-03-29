@@ -261,16 +261,19 @@ function setEntryChoiceOpen(isOpen) {
 function continueWithLocalPlay() {
   setEntryChoiceOpen(false);
   closeSheets();
+  resetGameState(false, { reason: 'local play chosen', skipSync: true });
   setOverlay('Ready', 'Press Start when you\'re ready.', true, PHASE.READY);
   updateUi();
+  draw();
 }
 
 function continueToSignIn() {
   setEntryChoiceOpen(false);
-  toggleAccountPanel(true);
+  closeSheets();
+  openSheet('account');
   setOverlay('Ready', 'Sign in when you want sync, or close the sheet and play locally.', true, PHASE.READY);
-  authEmail.focus();
   updateUi();
+  requestAnimationFrame(() => authEmail.focus());
 }
 
 function defaultStartDirection() {
