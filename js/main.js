@@ -153,9 +153,9 @@ async function boot() {
           showToast('Signed in. Save loaded.');
         } else {
           saveMode = 'local-only';
-          syncMessage = 'Signed out. You can keep playing locally on this device.';
+          syncMessage = 'Signed out. Choose local play or sign in to sync across devices.';
           clearAuthInputs();
-          setEntryChoiceOpen(false);
+          setEntryChoiceOpen(true);
           closeSheets();
           updateAuthButtons();
           updateUi();
