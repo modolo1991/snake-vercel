@@ -107,7 +107,7 @@ let levelFood = 0;
 let usedShield = false;
 let lastTime = 0;
 let accumulator = 0;
-let touchStart = null;
+let touchState = null;
 let tunnelCooldown = 0;
 let overlayMode = PHASE.READY;
 let toastTimer = 0;
@@ -176,6 +176,9 @@ function activeLevel() {
 
 function hasItem(id) { return profile.owned.includes(id); }
 function hasPower(id) { return hasItem(id) && profile.activePowers.includes(id); }
+function isPowerItem(id) {
+  return catalog.some((item) => item.id === id && item.type === 'power');
+}
 function currentSkin() { return catalog.find((item) => item.id === profile.equippedSkin) || catalog[0]; }
 function getSpeed() { return activeLevel().speed * (hasPower('power-slow') ? 0.88 : 1); }
 function keyOf(cell) { return `${cell.x},${cell.y}`; }
@@ -444,12 +447,9 @@ async function buyOrEquip(id) {
     if (item.type === 'skin') {
       draft.equippedSkin = id;
       result = result === 'purchased' ? 'purchased-equipped' : 'equipped';
-    } else if (draft.activePowers.includes(id)) {
-      draft.activePowers = draft.activePowers.filter((entry) => entry !== id);
-      result = 'deactivated';
     } else {
-      draft.activePowers.push(id);
-      result = result === 'purchased' ? 'purchased-activated' : 'activated';
+      if (!draft.activePowers.includes(id)) draft.activePowers.push(id);
+      result = result === 'purchased' ? 'purchased-activated' : 'already-active';
     }
     return draft;
   }, { reason: `shop: ${item.name}` });
@@ -460,15 +460,12 @@ async function buyOrEquip(id) {
   } else if (result === 'equipped') {
     showToast(`${item.name} equipped.`);
     showShopFeedback(`${item.name} is now equipped.`, 'success');
-  } else if (result === 'activated') {
-    showToast(`${item.name} enabled.`);
-    showShopFeedback(`${item.name} is active for this run.`, 'success');
-  } else if (result === 'deactivated') {
-    showToast(`${item.name} disabled.`);
-    showShopFeedback(`${item.name} is turned off.`, 'neutral');
+  } else if (result === 'already-active') {
+    showToast(`${item.name} is already active.`);
+    showShopFeedback(`${item.name} stays active for the rest of this run.`, 'neutral');
   } else {
-    showToast(`${item.name} ready.`);
-    showShopFeedback(`${item.name} unlocked and ready to use.`, 'success');
+    showToast(`${item.name} activated.`);
+    showShopFeedback(item.type === 'power' ? `${item.name} is live right now for this run.` : `${item.name} unlocked and equipped.`, 'success');
   }
 }
 
@@ -495,7 +492,8 @@ function renderShop() {
     card.className = `item ${affordable ? '' : 'item-locked'}`.trim();
     const accent = item.colors ? `<span class="swatch" style="background:${item.colors.head}"></span>` : '<span class="swatch" style="background:linear-gradient(135deg,#38bdf8,#8b5cf6)"></span>';
     const price = owned ? '<div class="item-price can-afford">Owned</div>' : `<div class="item-price ${affordable ? 'can-afford' : 'cant-afford'}">${item.cost} coins</div>`;
-    const label = !owned ? `Buy` : equipped ? (item.type === 'skin' ? 'Equipped' : 'Active') : (item.type === 'skin' ? 'Equip' : 'Activate');
+    const disableAction = item.type === 'power' ? owned : (owned && equipped);
+    const label = !owned ? 'Buy' : equipped ? (item.type === 'skin' ? 'Equipped' : 'Active this run') : (item.type === 'skin' ? 'Equip' : 'Owned');
     card.innerHTML = `
       <div class="item-head">
         <div>
@@ -505,7 +503,7 @@ function renderShop() {
         </div>
         ${accent}
       </div>
-      <button class="mini ${owned && equipped ? 'secondary' : owned ? 'ghost' : affordable ? '' : 'secondary'}" ${owned && equipped && item.type === 'skin' ? 'disabled' : ''}>${label}</button>
+      <button class="mini ${owned && equipped ? 'secondary' : owned ? 'ghost' : affordable ? '' : 'secondary'}" ${disableAction ? 'disabled' : ''}>${label}</button>
     `;
     card.querySelector('button').addEventListener('click', () => buyOrEquip(item.id));
     (item.type === 'skin' ? shopItemsSkins : shopItemsPowers).appendChild(card);
@@ -667,11 +665,25 @@ function applyMagnet() {
   const dx = head.x - coin.x;
   const dy = head.y - coin.y;
   const dist = Math.abs(dx) + Math.abs(dy);
-  if (dist > 3 || dist === 0) return;
-  const moveX = dx === 0 ? 0 : dx > 0 ? 1 : -1;
-  const moveY = dy === 0 ? 0 : dy > 0 ? 1 : -1;
-  const candidate = Math.abs(dx) >= Math.abs(dy) ? { x: coin.x + moveX, y: coin.y } : { x: coin.x, y: coin.y + moveY };
-  if (!isBlocked(candidate, [food])) Object.assign(coin, candidate);
+  if (dist === 0 || dist > 6) return;
+
+  const steps = dist <= 2 ? 2 : 1;
+  for (let stepIndex = 0; stepIndex < steps; stepIndex += 1) {
+    const moveDx = head.x - coin.x;
+    const moveDy = head.y - coin.y;
+    if (moveDx === 0 && moveDy === 0) break;
+    const options = [];
+    if (Math.abs(moveDx) >= Math.abs(moveDy)) {
+      options.push({ x: coin.x + Math.sign(moveDx), y: coin.y });
+      if (moveDy !== 0) options.push({ x: coin.x, y: coin.y + Math.sign(moveDy) });
+    } else {
+      options.push({ x: coin.x, y: coin.y + Math.sign(moveDy) });
+      if (moveDx !== 0) options.push({ x: coin.x + Math.sign(moveDx), y: coin.y });
+    }
+    const candidate = options.find((cell) => !isBlocked(cell, [food]));
+    if (!candidate) break;
+    Object.assign(coin, candidate);
+  }
 }
 
 function isBlocked(cell, extra = []) {
@@ -679,10 +691,21 @@ function isBlocked(cell, extra = []) {
   return [...snake, ...obstacles, ...tunnels.flatMap((pair) => [pair.a, pair.b]), ...extra].some((entry) => sameCell(entry, cell));
 }
 
+function clearRunPowerPurchases() {
+  const persistentOwned = profile.owned.filter((id) => !isPowerItem(id));
+  profile = saveLocalProfile({
+    ...profile,
+    owned: persistentOwned,
+    activePowers: [],
+  });
+}
+
 function loseLife() {
   lives = Math.max(0, lives - 1);
   if (lives <= 0) {
-    const summary = `Score ${score}. Coins banked this run: +${bankedRunCoins}. Press Start again for a new run.`;
+    clearRunPowerPurchases();
+    usedShield = false;
+    const summary = `Score ${score}. Coins banked this run: +${bankedRunCoins}. Power-ups were consumed. Press Start again for a new run.`;
     resetBoardForLevel(PHASE.DEAD);
     setOverlay('Game over', summary, true, PHASE.DEAD);
     syncProfileToCloud(false, 'death');
@@ -705,9 +728,15 @@ function updateUi() {
   levelEl.textContent = String(levelIndex + 1);
   livesEl.textContent = String(lives);
   speedPill.textContent = `Speed: ${getSpeed().toFixed(1)} tiles/sec`;
-  goalPill.textContent = `Next level: ${Math.max(activeLevel().target - levelFood, 0)} food`;
-  skinPill.textContent = `Skin: ${currentSkin().name}`;
+  goalPill.textContent = hasPower('power-shield') && !usedShield
+    ? `Shield ready • ${Math.max(activeLevel().target - levelFood, 0)} food to go`
+    : `Next level: ${Math.max(activeLevel().target - levelFood, 0)} food`;
+  skinPill.textContent = hasPower('power-magnet')
+    ? `Skin: ${currentSkin().name} • Magnet on`
+    : `Skin: ${currentSkin().name}`;
   saveModePill.textContent = `Save: ${currentUser ? 'auto cloud sync' : saveMode.replace('-', ' ')}`;
+  boardShell.classList.toggle('shield-ready', hasPower('power-shield') && !usedShield);
+  boardShell.classList.toggle('magnet-ready', hasPower('power-magnet'));
 
   let state = 'ready';
   if (phase === PHASE.COUNTDOWN) state = `starting in ${countdownRemaining}`;
@@ -723,7 +752,9 @@ function updateUi() {
   playPauseBtn.disabled = entryChoiceOpen;
   restartBtn.disabled = entryChoiceOpen;
   shopToggleBtn.disabled = entryChoiceOpen;
-  shopNote.textContent = phase === PHASE.RUNNING ? 'You can look now, but changing things between rounds is easier.' : 'Coins appear more often now, and prices are a bit friendlier between rounds.';
+  shopNote.textContent = phase === PHASE.RUNNING
+    ? 'Power-ups activate immediately when bought and last until game over.'
+    : 'Skins persist. Power-ups are single-run buys and activate instantly.';
 
   if (currentUser) {
     accountStatus.textContent = `Signed in as ${currentUser.email}`;
@@ -762,6 +793,20 @@ function drawCoin() {
   if (!coin) return;
   const cx = coin.x * CELL + CELL / 2;
   const cy = coin.y * CELL + CELL / 2;
+  if (hasPower('power-magnet')) {
+    const head = snake[0];
+    const dist = Math.abs(head.x - coin.x) + Math.abs(head.y - coin.y);
+    if (dist > 0 && dist <= 6) {
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.26)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.moveTo(head.x * CELL + CELL / 2, head.y * CELL + CELL / 2);
+      ctx.lineTo(cx, cy);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
   ctx.fillStyle = 'rgba(250, 204, 21, 0.17)'; ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.36, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.24, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = '#fde68a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.17, 0, Math.PI * 2); ctx.stroke();
@@ -796,10 +841,23 @@ function drawTunnels() {
 function drawSnake() {
   const skin = currentSkin().colors;
   const heading = currentHeading();
+  const shieldActive = hasPower('power-shield') && !usedShield;
   snake.forEach((seg, index) => {
     const x = seg.x * CELL + 2;
     const y = seg.y * CELL + 2;
     const size = CELL - 4;
+    if (index === 0 && shieldActive) {
+      const baseX = seg.x * CELL + CELL / 2;
+      const baseY = seg.y * CELL + CELL / 2;
+      const shieldGlow = ctx.createRadialGradient(baseX, baseY, CELL * 0.12, baseX, baseY, CELL * 0.95);
+      shieldGlow.addColorStop(0, 'rgba(125, 211, 252, 0.22)');
+      shieldGlow.addColorStop(0.55, 'rgba(56, 189, 248, 0.12)');
+      shieldGlow.addColorStop(1, 'rgba(14, 165, 233, 0)');
+      ctx.fillStyle = shieldGlow;
+      ctx.beginPath();
+      ctx.arc(baseX, baseY, CELL * 0.95, 0, Math.PI * 2);
+      ctx.fill();
+    }
     drawRoundedRect(x, y, size, size, 7, index === 0 ? skin.head : skin.body);
     if (index === 0) {
       const eyeOffsetX = heading.x === 0 ? CELL * 0.15 : heading.x * CELL * 0.12;
@@ -807,7 +865,18 @@ function drawSnake() {
       const baseX = seg.x * CELL + CELL / 2;
       const baseY = seg.y * CELL + CELL / 2;
       ctx.fillStyle = skin.eye; ctx.beginPath(); ctx.arc(baseX - 5 + eyeOffsetX, baseY - 5 + eyeOffsetY, 2.3, 0, Math.PI * 2); ctx.arc(baseX + 5 + eyeOffsetX, baseY - 5 + eyeOffsetY, 2.3, 0, Math.PI * 2); ctx.fill();
-      if (hasPower('power-shield') && !usedShield) { ctx.strokeStyle = 'rgba(125, 211, 252, 0.9)'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.arc(baseX, baseY, CELL * 0.42, 0, Math.PI * 2); ctx.stroke(); }
+      if (shieldActive) {
+        ctx.strokeStyle = 'rgba(186, 230, 253, 0.98)';
+        ctx.lineWidth = 3.6;
+        ctx.beginPath();
+        ctx.arc(baseX, baseY, CELL * 0.48, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.55)';
+        ctx.lineWidth = 7;
+        ctx.beginPath();
+        ctx.arc(baseX, baseY, CELL * 0.66, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
   });
 }
@@ -864,13 +933,12 @@ function handleKey(event) {
   else if (key === 'escape' && activeSheet) closeSheets();
 }
 
-function handleSwipe(startX, startY, endX, endY) {
-  const dx = endX - startX;
-  const dy = endY - startY;
-  const threshold = 16;
-  if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) return;
+function handleSwipeDelta(dx, dy) {
+  const threshold = 12;
+  if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) return false;
   if (Math.abs(dx) > Math.abs(dy)) applyDirectionInput(dx > 0 ? 1 : -1, 0);
   else applyDirectionInput(0, dy > 0 ? 1 : -1);
+  return true;
 }
 
 function updateViewportHeight() {
@@ -981,7 +1049,13 @@ function wireEvents() {
       event.preventDefault();
       return;
     }
-    touchStart = { x: event.clientX, y: event.clientY };
+    touchState = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      axis: null,
+    };
+    canvas.setPointerCapture?.(event.pointerId);
     event.preventDefault();
   }, { passive: false });
   canvas.addEventListener('pointermove', (event) => {
@@ -989,27 +1063,42 @@ function wireEvents() {
       event.preventDefault();
       return;
     }
-    if (touchStart) {
-      const dx = event.clientX - touchStart.x;
-      const dy = event.clientY - touchStart.y;
-      if (Math.abs(dx) >= 16 || Math.abs(dy) >= 16) {
-        handleSwipe(touchStart.x, touchStart.y, event.clientX, event.clientY);
-        touchStart = { x: event.clientX, y: event.clientY };
+    if (touchState && event.pointerId === touchState.pointerId) {
+      let dx = event.clientX - touchState.x;
+      let dy = event.clientY - touchState.y;
+      if (!touchState.axis && (Math.abs(dx) >= 12 || Math.abs(dy) >= 12)) {
+        touchState.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+      }
+      if (touchState.axis === 'x') dy = 0;
+      else if (touchState.axis === 'y') dx = 0;
+      if (handleSwipeDelta(dx, dy)) {
+        touchState.x = event.clientX;
+        touchState.y = event.clientY;
+        touchState.axis = null;
       }
     }
     event.preventDefault();
   }, { passive: false });
   canvas.addEventListener('pointerup', (event) => {
     if (entryChoiceOpen) {
-      touchStart = null;
+      touchState = null;
       event.preventDefault();
       return;
     }
-    if (touchStart) handleSwipe(touchStart.x, touchStart.y, event.clientX, event.clientY);
-    touchStart = null;
+    if (touchState && event.pointerId === touchState.pointerId) {
+      let dx = event.clientX - touchState.x;
+      let dy = event.clientY - touchState.y;
+      if (touchState.axis === 'x') dy = 0;
+      else if (touchState.axis === 'y') dx = 0;
+      handleSwipeDelta(dx, dy);
+      canvas.releasePointerCapture?.(event.pointerId);
+    }
+    touchState = null;
     event.preventDefault();
   }, { passive: false });
-  canvas.addEventListener('pointercancel', () => { touchStart = null; }, { passive: true });
+  canvas.addEventListener('pointercancel', (event) => {
+    if (touchState && event.pointerId === touchState.pointerId) touchState = null;
+  }, { passive: true });
   canvas.addEventListener('touchstart', (event) => event.preventDefault(), { passive: false });
   canvas.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
 

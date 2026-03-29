@@ -15,9 +15,9 @@ export const catalog = [
   { id: 'skin-gold', type: 'skin', name: 'Gold', cost: 8, desc: 'A shiny prestige skin.', colors: { body: '#fbbf24', head: '#f59e0b', eye: '#4b2e05' } },
   { id: 'skin-neon', type: 'skin', name: 'Neon', cost: 15, desc: 'Blue-purple arcade glow.', colors: { body: '#60a5fa', head: '#8b5cf6', eye: '#130b2f' } },
   { id: 'skin-coral', type: 'skin', name: 'Coral', cost: 20, desc: 'Bright sunset look.', colors: { body: '#fb7185', head: '#ef4444', eye: '#3b0b16' } },
-  { id: 'power-shield', type: 'power', name: 'Shield', cost: 10, desc: 'One crash save each run.' },
-  { id: 'power-slow', type: 'power', name: 'Slow Time', cost: 12, desc: 'Take 12% off level speed.' },
-  { id: 'power-magnet', type: 'power', name: 'Coin Magnet', cost: 14, desc: 'Nearby coins slide into you.' }
+  { id: 'power-shield', type: 'power', name: 'Shield', cost: 10, desc: 'Single-run buy. One very visible crash save.' },
+  { id: 'power-slow', type: 'power', name: 'Slow Time', cost: 12, desc: 'Single-run buy. Take 12% off level speed.' },
+  { id: 'power-magnet', type: 'power', name: 'Coin Magnet', cost: 14, desc: 'Single-run buy. Nearby coins pull in hard.' }
 ];
 
 export function defaultProfile() {
