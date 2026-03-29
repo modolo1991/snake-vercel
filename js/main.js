@@ -91,8 +91,8 @@ let syncInFlight = false;
 
 let snake = [];
 let direction = { x: 0, y: 0 };
-let nextDirection = { x: 0, y: 0 };
 let pendingStartDirection = null;
+let queuedDirections = [];
 let lastHeading = { x: 1, y: 0 };
 let food = null;
 let coin = null;
@@ -248,8 +248,8 @@ function closeSheets() {
 function centerSnake() {
   snake = CENTER_SPAWN.map((cell) => ({ ...cell }));
   direction = { x: 0, y: 0 };
-  nextDirection = { x: 0, y: 0 };
   pendingStartDirection = null;
+  queuedDirections = [];
   lastHeading = { x: 1, y: 0 };
   accumulator = 0;
   countdownRemaining = 0;
@@ -337,8 +337,8 @@ function resetBoardForLevel(phaseAfterReset = PHASE.READY) {
 
 function beginCountdown(dir = defaultStartDirection(), durationMs = 3000) {
   pendingStartDirection = { ...dir };
-  direction = { ...dir };
-  nextDirection = { ...dir };
+  queuedDirections = [];
+  direction = { x: 0, y: 0 };
   lastHeading = { ...dir };
   accumulator = 0;
   pausedPhase = null;
@@ -354,7 +354,6 @@ function beginCountdown(dir = defaultStartDirection(), durationMs = 3000) {
 function commitCountdownStart() {
   if (!pendingStartDirection) return;
   direction = { ...pendingStartDirection };
-  nextDirection = { ...pendingStartDirection };
   lastHeading = { ...pendingStartDirection };
   pendingStartDirection = null;
   pausedPhase = null;
@@ -408,30 +407,74 @@ function togglePlayPause() {
   else startOrResumeGame();
 }
 
-function canApplyDirectionInput(x, y) {
-  if (!x && !y) return false;
-  if (phase === PHASE.COUNTDOWN) return false;
-  if (isRoundReadyToStart()) return false;
-  if (phase === PHASE.PAUSED && pausedPhase === PHASE.COUNTDOWN) return false;
-  const heading = currentHeading();
-  if (phase === PHASE.RUNNING && x === -heading.x && y === -heading.y) return false;
-  return true;
+function isOppositeDirection(a, b) {
+  return Boolean(a && b && a.x === -b.x && a.y === -b.y);
 }
 
-function applyDirectionInput(x, y) {
-  if (!canApplyDirectionInput(x, y)) return false;
-  const requested = { x, y };
-  nextDirection = requested;
-  lastHeading = requested;
+function isSameDirection(a, b) {
+  return Boolean(a && b && a.x === b.x && a.y === b.y);
+}
+
+function normalizeDirection(x, y) {
+  if ((x && y) || (!x && !y)) return null;
+  return { x: Math.sign(x), y: Math.sign(y) };
+}
+
+function queuedDirectionBase() {
+  return queuedDirections.length ? queuedDirections[queuedDirections.length - 1] : currentHeading();
+}
+
+function queueDirectionInput(x, y) {
+  const requested = normalizeDirection(x, y);
+  if (!requested) return false;
+  if (isRoundReadyToStart()) {
+    beginCountdown(requested);
+    return true;
+  }
+  if (phase === PHASE.COUNTDOWN) {
+    if (isOppositeDirection(requested, pendingStartDirection)) return false;
+    if (isSameDirection(requested, pendingStartDirection)) return true;
+    queuedDirections = [requested];
+    pendingStartDirection = { ...requested };
+    return true;
+  }
+  if (phase === PHASE.PAUSED && pausedPhase === PHASE.COUNTDOWN) {
+    if (isOppositeDirection(requested, pendingStartDirection)) return false;
+    if (isSameDirection(requested, pendingStartDirection)) return true;
+    queuedDirections = [requested];
+    pendingStartDirection = { ...requested };
+    return true;
+  }
   if (phase === PHASE.PAUSED) {
-    direction = requested;
+    const base = queuedDirectionBase();
+    if (isOppositeDirection(requested, base) || isSameDirection(requested, base)) return false;
+    queuedDirections = [requested];
+    direction = { ...requested };
+    lastHeading = { ...requested };
     pausedPhase = null;
     pausedCountdownMs = 0;
     setPhase(PHASE.RUNNING);
     setOverlay('', '', false, 'none');
     updateUi();
+    return true;
   }
+  if (phase !== PHASE.RUNNING) return false;
+
+  const base = queuedDirectionBase();
+  if (isOppositeDirection(requested, base) || isSameDirection(requested, base)) return false;
+  if (queuedDirections.length >= 2) queuedDirections.shift();
+  queuedDirections.push(requested);
   return true;
+}
+
+function consumeQueuedDirection() {
+  if (!queuedDirections.length) return direction;
+  const next = queuedDirections.shift();
+  if (!next) return direction;
+  if (isOppositeDirection(next, direction)) return direction;
+  direction = { ...next };
+  lastHeading = { ...next };
+  return direction;
 }
 
 async function mutateProfile(mutator, options = {}) {
@@ -584,9 +627,13 @@ function levelUp() {
   draw();
 }
 
-async function awardCoin(amount) {
+function persistProfile(mutator, options = {}) {
+  mutateProfile(mutator, options).catch((error) => console.error('Profile mutation failed', error));
+}
+
+function awardCoin(amount) {
   bankedRunCoins += amount;
-  await mutateProfile((draft) => ({ ...draft, coins: draft.coins + amount, best: Math.max(draft.best, score) }), { reason: `coins +${amount}` });
+  persistProfile((draft) => ({ ...draft, coins: draft.coins + amount, best: Math.max(draft.best, score) }), { reason: `coins +${amount}` });
   showToast(`+${amount} coin${amount === 1 ? '' : 's'}`);
 }
 
@@ -630,10 +677,9 @@ function consumeShield() {
   return true;
 }
 
-async function step() {
-  direction = { ...nextDirection };
-  lastHeading = { ...direction };
+function step() {
   if (tunnelCooldown > 0) tunnelCooldown -= 1;
+  consumeQueuedDirection();
   const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
   const hitWall = head.x < 0 || head.y < 0 || head.x >= GRID || head.y >= GRID;
   const hitObstacle = obstacles.some((cell) => sameCell(cell, head));
@@ -656,7 +702,7 @@ async function step() {
     score += 1;
     levelFood += 1;
     grew = true;
-    if (score > profile.best) mutateProfile((draft) => ({ ...draft, best: score }), { reason: 'new best' });
+    if (score > profile.best) persistProfile((draft) => ({ ...draft, best: score }), { reason: 'new best' });
     food = randomFreeCell([coin, heart, powerStar].filter(Boolean));
     maybeSpawnCoin();
     maybeSpawnHeart();
@@ -669,7 +715,7 @@ async function step() {
   if (coin && snake.some((seg) => sameCell(seg, coin))) {
     const value = coin.type?.value || 1;
     coin = null;
-    await awardCoin(value);
+    awardCoin(value);
   }
   if (heart && sameCell(snake[0], heart)) {
     heart = null;
@@ -992,7 +1038,7 @@ function updateCountdown(now) {
 
 function loop(timestamp) {
   if (!lastTime) lastTime = timestamp;
-  const delta = (timestamp - lastTime) / 1000;
+  const delta = Math.min((timestamp - lastTime) / 1000, 0.25);
   lastTime = timestamp;
   updateCountdown(timestamp);
   if (phase === PHASE.RUNNING) {
@@ -1001,7 +1047,13 @@ function loop(timestamp) {
     while (accumulator >= interval) {
       accumulator -= interval;
       if (phase !== PHASE.RUNNING) break;
-      step().catch((error) => console.error('Snake step failed', error));
+      try {
+        step();
+      } catch (error) {
+        console.error('Snake step failed', error);
+        pauseGame();
+        break;
+      }
     }
   }
   requestAnimationFrame(loop);
@@ -1015,31 +1067,53 @@ function handleKey(event) {
   if (isTypingTarget(event.target) || isTypingTarget(document.activeElement)) return;
   const key = event.key.toLowerCase();
   if (["arrowup","arrowdown","arrowleft","arrowright","w","a","s","d"," ","f","escape"].includes(key)) event.preventDefault();
-  if (key === 'arrowup' || key === 'w') applyDirectionInput(0, -1);
-  else if (key === 'arrowdown' || key === 's') applyDirectionInput(0, 1);
-  else if (key === 'arrowleft' || key === 'a') applyDirectionInput(-1, 0);
-  else if (key === 'arrowright' || key === 'd') applyDirectionInput(1, 0);
+  if (key === 'arrowup' || key === 'w') queueDirectionInput(0, -1);
+  else if (key === 'arrowdown' || key === 's') queueDirectionInput(0, 1);
+  else if (key === 'arrowleft' || key === 'a') queueDirectionInput(-1, 0);
+  else if (key === 'arrowright' || key === 'd') queueDirectionInput(1, 0);
   else if (key === ' ') togglePlayPause();
   else if (key === 'f') goFullscreen();
   else if (key === 'escape' && activeSheet) closeSheets();
 }
 
-function handleSwipeDelta(dx, dy) {
-  const threshold = 12;
+function detectSwipeDirection(dx, dy, lockedAxis = null) {
+  const threshold = 18;
+  const dominanceRatio = 1.2;
   const absX = Math.abs(dx);
   const absY = Math.abs(dy);
-  if (absX < threshold && absY < threshold) return false;
 
-  const primary = absX >= absY
-    ? { x: dx > 0 ? 1 : -1, y: 0, strength: absX }
-    : { x: 0, y: dy > 0 ? 1 : -1, strength: absY };
-  const secondary = absX >= absY
-    ? { x: 0, y: dy > 0 ? 1 : -1, strength: absY }
-    : { x: dx > 0 ? 1 : -1, y: 0, strength: absX };
+  if (lockedAxis === 'x' && absX >= threshold) return { x: dx > 0 ? 1 : -1, y: 0, axis: 'x' };
+  if (lockedAxis === 'y' && absY >= threshold) return { x: 0, y: dy > 0 ? 1 : -1, axis: 'y' };
+  if (absX < threshold && absY < threshold) return null;
 
-  if (primary.strength >= threshold && applyDirectionInput(primary.x, primary.y)) return true;
-  if (secondary.strength >= threshold && applyDirectionInput(secondary.x, secondary.y)) return true;
-  return false;
+  if (absX >= threshold && absX >= absY * dominanceRatio) return { x: dx > 0 ? 1 : -1, y: 0, axis: 'x' };
+  if (absY >= threshold && absY >= absX * dominanceRatio) return { x: 0, y: dy > 0 ? 1 : -1, axis: 'y' };
+
+  if (absX >= threshold && absY < threshold) return { x: dx > 0 ? 1 : -1, y: 0, axis: 'x' };
+  if (absY >= threshold && absX < threshold) return { x: 0, y: dy > 0 ? 1 : -1, axis: 'y' };
+  return null;
+}
+
+function handleSwipeMove(event) {
+  if (!touchState || event.pointerId !== touchState.pointerId) return false;
+  const totalDx = event.clientX - touchState.startX;
+  const totalDy = event.clientY - touchState.startY;
+  const detected = detectSwipeDirection(totalDx, totalDy, touchState.lockedAxis);
+  if (!detected) return false;
+
+  touchState.lockedAxis = detected.axis;
+  const axisDistance = detected.axis === 'x'
+    ? event.clientX - touchState.anchorX
+    : event.clientY - touchState.anchorY;
+  const axisThreshold = 18;
+  if (Math.abs(axisDistance) < axisThreshold) return false;
+
+  const accepted = queueDirectionInput(detected.x, detected.y);
+  if (accepted) {
+    touchState.anchorX = event.clientX;
+    touchState.anchorY = event.clientY;
+  }
+  return accepted;
 }
 
 function updateViewportHeight() {
@@ -1154,8 +1228,11 @@ function wireEvents() {
     }
     touchState = {
       pointerId: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
+      startX: event.clientX,
+      startY: event.clientY,
+      anchorX: event.clientX,
+      anchorY: event.clientY,
+      lockedAxis: null,
     };
     canvas.setPointerCapture?.(event.pointerId);
     event.preventDefault();
@@ -1165,14 +1242,7 @@ function wireEvents() {
       event.preventDefault();
       return;
     }
-    if (touchState && event.pointerId === touchState.pointerId) {
-      const dx = event.clientX - touchState.x;
-      const dy = event.clientY - touchState.y;
-      if (handleSwipeDelta(dx, dy)) {
-        touchState.x = event.clientX;
-        touchState.y = event.clientY;
-      }
-    }
+    handleSwipeMove(event);
     event.preventDefault();
   }, { passive: false });
   canvas.addEventListener('pointerup', (event) => {
@@ -1181,10 +1251,8 @@ function wireEvents() {
       event.preventDefault();
       return;
     }
+    handleSwipeMove(event);
     if (touchState && event.pointerId === touchState.pointerId) {
-      const dx = event.clientX - touchState.x;
-      const dy = event.clientY - touchState.y;
-      handleSwipeDelta(dx, dy);
       canvas.releasePointerCapture?.(event.pointerId);
     }
     touchState = null;
