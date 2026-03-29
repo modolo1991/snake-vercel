@@ -9,7 +9,21 @@
 </head>
 <body>
   <main class="app">
-    <section class="shell">
+    <section class="entry-screen" id="entryScreen" aria-labelledby="entryTitle" aria-describedby="entryText">
+      <div class="entry-screen-card">
+        <div class="entry-choice-copy">
+          <div class="entry-badge">🐍 Snake Deluxe</div>
+          <h2 id="entryTitle">Choose how you want to start</h2>
+          <p id="entryText">Sign in if you want your coins and progress to follow you across devices, or just play locally on this device right now.</p>
+        </div>
+        <div class="entry-actions">
+          <button id="entrySignInBtn" type="button">Sign in / create account</button>
+          <button class="secondary" id="entryLocalBtn" type="button">Play on this device only</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="shell hidden" id="gameShell" aria-hidden="true">
       <header class="top-hud">
         <div class="brand-block">
           <div class="brand-mark">🐍</div>
@@ -71,18 +85,6 @@
             </div>
             <div class="toast hidden" id="toast"></div>
           </section>
-        </div>
-      </section>
-
-      <section class="entry-choice" id="entryChoice" aria-labelledby="entryTitle" aria-describedby="entryText">
-        <div class="entry-choice-copy">
-          <div class="entry-badge">🐍 Snake Deluxe</div>
-          <h2 id="entryTitle">Choose how you want to start</h2>
-          <p id="entryText">Sign in if you want your coins and progress to follow you across devices, or just play locally on this device right now.</p>
-        </div>
-        <div class="entry-actions">
-          <button id="entrySignInBtn" type="button">Sign in / create account</button>
-          <button class="secondary" id="entryLocalBtn" type="button">Play on this device only</button>
         </div>
       </section>
 

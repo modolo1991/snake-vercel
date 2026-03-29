@@ -32,7 +32,8 @@ const shopToggleBtn = document.getElementById('shopToggleBtn');
 const accountToggleBtn = document.getElementById('accountToggleBtn');
 
 const sheetBackdrop = document.getElementById('sheetBackdrop');
-const entryChoice = document.getElementById('entryChoice');
+const entryScreen = document.getElementById('entryScreen');
+const gameShell = document.getElementById('gameShell');
 const entrySignInBtn = document.getElementById('entrySignInBtn');
 const entryLocalBtn = document.getElementById('entryLocalBtn');
 const shopSheet = document.getElementById('shopSheet');
@@ -154,7 +155,8 @@ async function boot() {
           saveMode = 'local-only';
           syncMessage = 'Signed out. You can keep playing locally on this device.';
           clearAuthInputs();
-          setEntryChoiceOpen(true);
+          setEntryChoiceOpen(false);
+          closeSheets();
           updateAuthButtons();
           updateUi();
         }
@@ -256,8 +258,11 @@ function clearAuthInputs() {
 
 function setEntryChoiceOpen(isOpen) {
   entryChoiceOpen = isOpen;
-  entryChoice.classList.toggle('hidden', !isOpen);
-  entryChoice.setAttribute('aria-hidden', String(!isOpen));
+  entryScreen.classList.toggle('hidden', !isOpen);
+  entryScreen.setAttribute('aria-hidden', String(!isOpen));
+  gameShell.classList.toggle('hidden', isOpen);
+  gameShell.setAttribute('aria-hidden', String(isOpen));
+  if (!isOpen) requestAnimationFrame(() => updateBoardSize());
 }
 
 function continueWithLocalPlay() {
@@ -270,6 +275,7 @@ function continueWithLocalPlay() {
 }
 
 function continueToSignIn() {
+  setEntryChoiceOpen(false);
   closeSheets();
   openSheet('account');
   setOverlay('Ready', 'Sign in when you want sync, or close the sheet and play locally.', true, PHASE.READY);
