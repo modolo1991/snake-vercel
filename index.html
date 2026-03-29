@@ -74,6 +74,18 @@
         </div>
       </section>
 
+      <section class="entry-choice" id="entryChoice" aria-labelledby="entryTitle" aria-describedby="entryText">
+        <div class="entry-choice-copy">
+          <div class="entry-badge">🐍 Snake Deluxe</div>
+          <h2 id="entryTitle">Choose how you want to start</h2>
+          <p id="entryText">Sign in if you want your coins and progress to follow you across devices, or just play locally on this device right now.</p>
+        </div>
+        <div class="entry-actions">
+          <button id="entrySignInBtn" type="button">Sign in / create account</button>
+          <button class="secondary" id="entryLocalBtn" type="button">Play on this device only</button>
+        </div>
+      </section>
+
       <footer class="control-dock compact-dock">
         <div class="dock-main-actions">
           <button id="playPauseBtn">Start</button>
@@ -86,19 +98,6 @@
   </main>
 
   <div class="sheet-backdrop hidden" id="sheetBackdrop"></div>
-
-  <section class="entry-modal" id="entryModal" aria-modal="true" role="dialog" aria-labelledby="entryTitle" aria-describedby="entryText">
-    <div class="entry-card">
-      <div class="entry-badge">🐍 Snake Deluxe</div>
-      <h2 id="entryTitle">How do you want to play?</h2>
-      <p id="entryText">Start instantly on this device, or sign in so your coins and progress can follow you across devices.</p>
-      <div class="entry-actions">
-        <button id="entrySignInBtn" type="button">Sign in or create account</button>
-        <button class="secondary" id="entryLocalBtn" type="button">Play on this device only</button>
-      </div>
-      <p class="entry-note">Local play still saves here in this browser. It just won’t sync anywhere else.</p>
-    </div>
-  </section>
 
   <section class="sheet hidden" id="shopSheet" aria-hidden="true">
     <div class="sheet-grab"></div>

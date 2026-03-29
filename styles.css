@@ -324,33 +324,24 @@ button:disabled { opacity: 0.58; cursor: default; transform: none; }
   backdrop-filter: blur(4px);
   z-index: 20;
 }
-.entry-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
+.entry-choice {
   display: grid;
-  place-items: center;
-  padding:
-    max(16px, var(--safe-top))
-    max(16px, calc(16px + var(--safe-right)))
-    max(16px, calc(16px + var(--safe-bottom)))
-    max(16px, calc(16px + var(--safe-left)));
-  background: rgba(2, 6, 23, 0.72);
-  backdrop-filter: blur(8px);
-}
-.entry-card {
-  width: min(100%, 420px);
-  background: linear-gradient(180deg, rgba(12, 20, 35, 0.98), rgba(9, 16, 30, 0.98));
+  gap: 12px;
+  padding: 12px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(12, 20, 35, 0.96), rgba(9, 16, 30, 0.96));
   border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 28px;
-  padding: 22px 18px;
   box-shadow: var(--shadow);
+}
+.entry-choice.hidden {
+  display: none !important;
+}
+.entry-choice-copy {
   display: grid;
-  gap: 14px;
-  text-align: center;
+  gap: 8px;
 }
 .entry-badge {
-  justify-self: center;
+  justify-self: start;
   padding: 6px 12px;
   border-radius: 999px;
   background: rgba(56, 189, 248, 0.14);
@@ -359,21 +350,19 @@ button:disabled { opacity: 0.58; cursor: default; transform: none; }
   font-size: 0.84rem;
   font-weight: 700;
 }
-.entry-card h2 {
+.entry-choice h2 {
   margin: 0;
-  font-size: clamp(1.35rem, 5vw, 1.8rem);
+  font-size: clamp(1.05rem, 4vw, 1.4rem);
 }
-.entry-card p {
+.entry-choice p {
   margin: 0;
   color: var(--muted);
   line-height: 1.45;
 }
 .entry-actions {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-}
-.entry-note {
-  font-size: 0.88rem;
 }
 .sheet {
   position: fixed;
@@ -530,7 +519,8 @@ input {
   .dock-main-actions button { min-height: 42px; padding: 9px 8px; font-size: 0.84rem; }
   .swipe-hint { font-size: 0.75rem; }
   .message-actions, .account-actions, .auth-actions, .auth-secondary { flex-direction: column; }
-  .entry-card { padding: 20px 16px; border-radius: 24px; }
+  .entry-choice { padding: 16px 14px; border-radius: 20px; }
+  .entry-actions { grid-template-columns: 1fr; }
   .account-tools { flex-direction: column; align-items: stretch; }
   .sheet { left: 6px; right: 6px; bottom: max(6px, calc(6px + var(--safe-bottom))); border-radius: 24px; }
 }
@@ -539,18 +529,6 @@ input {
   .desktop-only { display: inline-flex; }
 }
 
-
-.entry-modal {
-  z-index: 50;
-  overscroll-behavior: contain;
-}
-.entry-modal.hidden {
-  display: none !important;
-}
-.entry-card {
-  position: relative;
-  z-index: 1;
-}
 .entry-actions button {
   touch-action: manipulation;
 }

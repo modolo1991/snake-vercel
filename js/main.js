@@ -32,7 +32,7 @@ const shopToggleBtn = document.getElementById('shopToggleBtn');
 const accountToggleBtn = document.getElementById('accountToggleBtn');
 
 const sheetBackdrop = document.getElementById('sheetBackdrop');
-const entryModal = document.getElementById('entryModal');
+const entryChoice = document.getElementById('entryChoice');
 const entrySignInBtn = document.getElementById('entrySignInBtn');
 const entryLocalBtn = document.getElementById('entryLocalBtn');
 const shopSheet = document.getElementById('shopSheet');
@@ -140,19 +140,21 @@ async function boot() {
       const { user } = await getSession();
       currentUser = user;
       if (currentUser) await syncProfileFromCloud();
-      else syncMessage = 'Play here now, or sign in to keep your save across devices.';
+      else syncMessage = 'Choose local play or sign in to sync this save across devices.';
       onAuthStateChange(async (user) => {
         currentUser = user;
         if (currentUser) {
           clearAuthInputs();
+          setEntryChoiceOpen(false);
           await syncProfileFromCloud();
           closeSheets();
           setOverlay('', '', false, 'none');
           showToast('Signed in. Save loaded.');
         } else {
           saveMode = 'local-only';
-          syncMessage = 'Signed out. This device keeps the current session locally.';
+          syncMessage = 'Signed out. You can keep playing locally on this device.';
           clearAuthInputs();
+          setEntryChoiceOpen(true);
           updateAuthButtons();
           updateUi();
         }
@@ -254,8 +256,8 @@ function clearAuthInputs() {
 
 function setEntryChoiceOpen(isOpen) {
   entryChoiceOpen = isOpen;
-  entryModal.classList.toggle('hidden', !isOpen);
-  entryModal.setAttribute('aria-hidden', String(!isOpen));
+  entryChoice.classList.toggle('hidden', !isOpen);
+  entryChoice.setAttribute('aria-hidden', String(!isOpen));
 }
 
 function continueWithLocalPlay() {
@@ -268,7 +270,6 @@ function continueWithLocalPlay() {
 }
 
 function continueToSignIn() {
-  setEntryChoiceOpen(false);
   closeSheets();
   openSheet('account');
   setOverlay('Ready', 'Sign in when you want sync, or close the sheet and play locally.', true, PHASE.READY);
@@ -296,7 +297,7 @@ function resetGameState(autoStart = false, options = {}) {
   food = randomFreeCell();
   setPhase(PHASE.READY);
   if (autoStart) beginCountdown(defaultStartDirection());
-  else setOverlay('Ready', 'Press Start when you're ready.', true, PHASE.READY);
+  else setOverlay('Ready', 'Press Start when you\'re ready.', true, PHASE.READY);
   updateUi();
   draw();
   if (!options.skipSync) syncProfileToCloud(false, options.reason || 'reset');
@@ -710,7 +711,12 @@ function updateUi() {
   else if (phase === PHASE.DEAD) state = 'game over';
   statePill.textContent = `State: ${state}`;
 
-  playPauseBtn.textContent = phase === PHASE.DEAD ? 'Start again' : (phase === PHASE.RUNNING || phase === PHASE.COUNTDOWN ? 'Pause' : phase === PHASE.PAUSED ? 'Resume' : 'Start');
+  playPauseBtn.textContent = entryChoiceOpen
+    ? 'Choose above to begin'
+    : phase === PHASE.DEAD ? 'Start again' : (phase === PHASE.RUNNING || phase === PHASE.COUNTDOWN ? 'Pause' : phase === PHASE.PAUSED ? 'Resume' : 'Start');
+  playPauseBtn.disabled = entryChoiceOpen;
+  restartBtn.disabled = entryChoiceOpen;
+  shopToggleBtn.disabled = entryChoiceOpen;
   shopNote.textContent = phase === PHASE.RUNNING ? 'You can look now, but changing things between rounds is easier.' : 'Coins appear more often now, and prices are a bit friendlier between rounds.';
 
   if (currentUser) {
@@ -907,6 +913,7 @@ async function syncProfileFromCloud() {
     saveMode = 'local-only';
     syncMessage = `Cloud sync failed: ${error.message}`;
   }
+  if (currentUser) setEntryChoiceOpen(false);
   updateAuthButtons();
   updateUi();
   draw();
