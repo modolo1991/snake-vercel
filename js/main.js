@@ -408,13 +408,19 @@ function togglePlayPause() {
   else startOrResumeGame();
 }
 
-function applyDirectionInput(x, y) {
-  const requested = { x, y };
-  if (phase === PHASE.COUNTDOWN) return;
-  if (isRoundReadyToStart()) return;
+function canApplyDirectionInput(x, y) {
+  if (!x && !y) return false;
+  if (phase === PHASE.COUNTDOWN) return false;
+  if (isRoundReadyToStart()) return false;
+  if (phase === PHASE.PAUSED && pausedPhase === PHASE.COUNTDOWN) return false;
   const heading = currentHeading();
-  if (phase === PHASE.RUNNING && x === -heading.x && y === -heading.y) return;
-  if (phase === PHASE.PAUSED && pausedPhase === PHASE.COUNTDOWN) return;
+  if (phase === PHASE.RUNNING && x === -heading.x && y === -heading.y) return false;
+  return true;
+}
+
+function applyDirectionInput(x, y) {
+  if (!canApplyDirectionInput(x, y)) return false;
+  const requested = { x, y };
   nextDirection = requested;
   lastHeading = requested;
   if (phase === PHASE.PAUSED) {
@@ -425,6 +431,7 @@ function applyDirectionInput(x, y) {
     setOverlay('', '', false, 'none');
     updateUi();
   }
+  return true;
 }
 
 async function mutateProfile(mutator, options = {}) {
@@ -615,9 +622,11 @@ function activatePowerMode() {
 function consumeShield() {
   if (!hasPower('power-shield') || usedShield) return false;
   usedShield = true;
-  snake.shift();
-  direction = { ...nextDirection };
-  showToast('Shield used.');
+  resetBoardForLevel(PHASE.READY);
+  setOverlay('Shield used', 'Crash absorbed. No life lost. Press Start to continue this level.', true, PHASE.READY);
+  showToast('Shield absorbed the crash.');
+  updateUi();
+  draw();
   return true;
 }
 
@@ -1017,10 +1026,20 @@ function handleKey(event) {
 
 function handleSwipeDelta(dx, dy) {
   const threshold = 12;
-  if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) return false;
-  if (Math.abs(dx) > Math.abs(dy)) applyDirectionInput(dx > 0 ? 1 : -1, 0);
-  else applyDirectionInput(0, dy > 0 ? 1 : -1);
-  return true;
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+  if (absX < threshold && absY < threshold) return false;
+
+  const primary = absX >= absY
+    ? { x: dx > 0 ? 1 : -1, y: 0, strength: absX }
+    : { x: 0, y: dy > 0 ? 1 : -1, strength: absY };
+  const secondary = absX >= absY
+    ? { x: 0, y: dy > 0 ? 1 : -1, strength: absY }
+    : { x: dx > 0 ? 1 : -1, y: 0, strength: absX };
+
+  if (primary.strength >= threshold && applyDirectionInput(primary.x, primary.y)) return true;
+  if (secondary.strength >= threshold && applyDirectionInput(secondary.x, secondary.y)) return true;
+  return false;
 }
 
 function updateViewportHeight() {
@@ -1137,7 +1156,6 @@ function wireEvents() {
       pointerId: event.pointerId,
       x: event.clientX,
       y: event.clientY,
-      axis: null,
     };
     canvas.setPointerCapture?.(event.pointerId);
     event.preventDefault();
@@ -1148,17 +1166,11 @@ function wireEvents() {
       return;
     }
     if (touchState && event.pointerId === touchState.pointerId) {
-      let dx = event.clientX - touchState.x;
-      let dy = event.clientY - touchState.y;
-      if (!touchState.axis && (Math.abs(dx) >= 12 || Math.abs(dy) >= 12)) {
-        touchState.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
-      }
-      if (touchState.axis === 'x') dy = 0;
-      else if (touchState.axis === 'y') dx = 0;
+      const dx = event.clientX - touchState.x;
+      const dy = event.clientY - touchState.y;
       if (handleSwipeDelta(dx, dy)) {
         touchState.x = event.clientX;
         touchState.y = event.clientY;
-        touchState.axis = null;
       }
     }
     event.preventDefault();
@@ -1170,10 +1182,8 @@ function wireEvents() {
       return;
     }
     if (touchState && event.pointerId === touchState.pointerId) {
-      let dx = event.clientX - touchState.x;
-      let dy = event.clientY - touchState.y;
-      if (touchState.axis === 'x') dy = 0;
-      else if (touchState.axis === 'y') dx = 0;
+      const dx = event.clientX - touchState.x;
+      const dy = event.clientY - touchState.y;
       handleSwipeDelta(dx, dy);
       canvas.releasePointerCapture?.(event.pointerId);
     }
