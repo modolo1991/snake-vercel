@@ -222,9 +222,9 @@ function openSheet(id) {
   shopSheet.classList.toggle('hidden', !showShop);
   accountSheet.classList.toggle('hidden', !showAccount);
   sheetBackdrop.classList.toggle('hidden', !id);
-  setElementInteractivity(shopSheet, !entryChoiceOpen && showShop);
-  setElementInteractivity(accountSheet, !entryChoiceOpen && showAccount);
-  setElementInteractivity(sheetBackdrop, !entryChoiceOpen && !!id);
+  shopSheet.setAttribute('aria-hidden', String(!showShop));
+  accountSheet.setAttribute('aria-hidden', String(!showAccount));
+  sheetBackdrop.setAttribute('aria-hidden', String(!id));
   accountToggleBtn.setAttribute('aria-expanded', String(showAccount));
   shopToggleBtn.setAttribute('aria-pressed', String(showShop));
 }
@@ -252,21 +252,10 @@ function clearAuthInputs() {
   authPassword.value = '';
 }
 
-function setElementInteractivity(element, interactive) {
-  if (!element) return;
-  if ('inert' in element) element.inert = !interactive;
-  element.setAttribute('aria-hidden', String(!interactive));
-}
-
 function setEntryChoiceOpen(isOpen) {
   entryChoiceOpen = isOpen;
   entryModal.classList.toggle('hidden', !isOpen);
   entryModal.setAttribute('aria-hidden', String(!isOpen));
-  document.body.classList.toggle('entry-open', isOpen);
-  setElementInteractivity(document.querySelector('.app'), !isOpen);
-  setElementInteractivity(shopSheet, !isOpen && isSheetOpen('shop'));
-  setElementInteractivity(accountSheet, !isOpen && isSheetOpen('account'));
-  setElementInteractivity(sheetBackdrop, !isOpen && !!activeSheet);
 }
 
 function continueWithLocalPlay() {
@@ -970,40 +959,6 @@ function toggleAccountPanel(force) {
   updateUi();
 }
 
-function bindPress(element, handler) {
-  if (!element) return;
-  let lastTouchActivationAt = 0;
-  const activate = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    handler(event);
-  };
-
-  element.addEventListener('click', (event) => {
-    if (Date.now() - lastTouchActivationAt < 700) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    activate(event);
-  });
-
-  const supportsPointerEvents = 'PointerEvent' in window;
-
-  element.addEventListener('pointerup', (event) => {
-    if (event.pointerType === 'mouse') return;
-    lastTouchActivationAt = Date.now();
-    activate(event);
-  }, { passive: false });
-
-  if (!supportsPointerEvents) {
-    element.addEventListener('touchend', (event) => {
-      lastTouchActivationAt = Date.now();
-      activate(event);
-    }, { passive: false });
-  }
-}
-
 function wireEvents() {
   canvas.addEventListener('pointerdown', (event) => {
     if (entryChoiceOpen) {
@@ -1042,8 +997,8 @@ function wireEvents() {
   canvas.addEventListener('touchstart', (event) => event.preventDefault(), { passive: false });
   canvas.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
 
-  bindPress(entryLocalBtn, continueWithLocalPlay);
-  bindPress(entrySignInBtn, continueToSignIn);
+  entryLocalBtn.addEventListener('click', continueWithLocalPlay);
+  entrySignInBtn.addEventListener('click', continueToSignIn);
 
   playPauseBtn.addEventListener('click', togglePlayPause);
   shopTabSkins.addEventListener('click', () => setShopTab('skins'));
